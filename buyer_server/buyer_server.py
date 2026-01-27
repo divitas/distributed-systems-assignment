@@ -26,9 +26,15 @@ import logging
 import time
 from typing import Dict, Optional, Callable
 from dataclasses import dataclass
+import sys
+import os
+
+# Add project root (parent folder) to Python path
+PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, PROJECT_ROOT)
 
 # Import the database client to communicate with backends
-from db_client import DatabaseClient, DBConnectionError
+from db_client.db_client import DatabaseClient, DBConnectionError
 
 logging.basicConfig(
     level=logging.INFO,

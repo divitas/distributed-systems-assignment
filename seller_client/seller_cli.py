@@ -14,8 +14,16 @@ import sys
 import argparse
 import getpass
 from typing import Optional, List
-from seller_client import SellerClient, ConnectionError
-from seller_api import SellerAPI, APIError, Item
+
+import sys
+import os
+
+# Add project root (parent folder) to Python path
+PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, PROJECT_ROOT)
+
+from seller_client.seller_client import SellerClient, ConnectionError
+from seller_client.seller_api import SellerAPI, APIError, Item
 
 
 class SellerCLI:

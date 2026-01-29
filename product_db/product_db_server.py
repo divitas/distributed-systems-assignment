@@ -1,17 +1,16 @@
 """
-product_db_server.py - Product Database Server
+product_db_server.py - Product Database Server with SQLite Backend
 
 This is a backend database server that stores and manages:
 - Items for sale (all attributes)
-- Item ID generation (category-based unique IDs)
+- Item ID generation (auto-incremented unique IDs)
 - Item search functionality
 - Item feedback tracking
 
 This server receives requests from the frontend servers (Buyer Server,
 Seller Server) and performs data operations.
 
-Storage: In-memory with optional file persistence.
-In production, you would use a real database (PostgreSQL, etc.)
+Storage: SQLite database with proper connection pooling and thread-safety.
 """
 
 import socket
@@ -20,10 +19,9 @@ import struct
 import threading
 import logging
 import time
-import os
+import sqlite3
 from typing import Dict, Optional, List, Callable
-from dataclasses import dataclass, field, asdict
-from threading import Lock
+from contextlib import contextmanager
 
 logging.basicConfig(
     level=logging.INFO,
@@ -33,69 +31,120 @@ logger = logging.getLogger(__name__)
 
 
 # =============================================================================
-# Data Models
-# =============================================================================
-
-@dataclass
-class Item:
-    """Item for sale."""
-    item_id: tuple           # (category, unique_id)
-    name: str                # max 32 chars
-    category: int
-    keywords: List[str]      # up to 5, each max 8 chars
-    condition: str           # "New" or "Used"
-    sale_price: float
-    quantity: int
-    seller_id: int
-    thumbs_up: int = 0
-    thumbs_down: int = 0
-
-
-# =============================================================================
-# In-Memory Storage
+# SQLite Storage Backend
 # =============================================================================
 
 class ProductStorage:
     """
-    Thread-safe in-memory storage for product data.
-    
-    Uses locks to ensure thread safety for concurrent access.
+    Thread-safe product database using SQLite.
     """
     
-    def __init__(self, persistence_file: Optional[str] = None):
+    def __init__(self, db_path: str = "products.db"):
         """
-        Initialize storage.
+        Initialize the database.
         
         Args:
-            persistence_file: Optional file path for data persistence
+            db_path: Path to SQLite database file
         """
-        self._lock = Lock()
-        self._persistence_file = persistence_file
+        self.db_path = db_path
+        self.local = threading.local()
         
-        # Main item storage: item_id (as string "cat,id") -> Item
-        self._items: Dict[str, Item] = {}
-        
-        # Index by seller for quick lookup
-        self._seller_items: Dict[int, List[str]] = {}  # seller_id -> list of item_id strings
-        
-        # Index by category for search
-        self._category_items: Dict[int, List[str]] = {}  # category -> list of item_id strings
-        
-        # ID counter per category
-        self._next_item_id: Dict[int, int] = {}  # category -> next_id
-        
-        # Load persisted data if available
-        if persistence_file and os.path.exists(persistence_file):
-            self._load_data()
+        # Initialize database schema
+        self._init_schema()
     
-    def _item_id_to_str(self, item_id: tuple) -> str:
-        """Convert item_id tuple to string key."""
-        return f"{item_id[0]},{item_id[1]}"
+    def _get_connection(self) -> sqlite3.Connection:
+        """
+        Get a thread-local database connection.
+        Each thread gets its own connection for thread-safety.
+        """
+        if not hasattr(self.local, 'connection'):
+            self.local.connection = sqlite3.connect(
+                self.db_path,
+                check_same_thread=False,
+                timeout=30.0
+            )
+            # Enable foreign keys
+            self.local.connection.execute("PRAGMA foreign_keys = ON")
+            # Use WAL mode for better concurrency
+            self.local.connection.execute("PRAGMA journal_mode = WAL")
+            # Row factory for dict-like access
+            self.local.connection.row_factory = sqlite3.Row
+        
+        return self.local.connection
     
-    def _str_to_item_id(self, s: str) -> tuple:
-        """Convert string key back to item_id tuple."""
-        parts = s.split(',')
-        return (int(parts[0]), int(parts[1]))
+    @contextmanager
+    def _get_cursor(self):
+        """Context manager for database cursor with automatic commit/rollback."""
+        conn = self._get_connection()
+        cursor = conn.cursor()
+        try:
+            yield cursor
+            conn.commit()
+        except Exception as e:
+            conn.rollback()
+            raise
+    
+    def _init_schema(self):
+        """Initialize database schema."""
+        with self._get_cursor() as cursor:
+            # Items table
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS items (
+                    item_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    category INTEGER NOT NULL,
+                    unique_id INTEGER NOT NULL,
+                    seller_id INTEGER NOT NULL,
+                    name TEXT NOT NULL,
+                    condition TEXT NOT NULL CHECK(condition IN ('New', 'Used')),
+                    sale_price REAL NOT NULL,
+                    quantity INTEGER NOT NULL,
+                    thumbs_up INTEGER DEFAULT 0,
+                    thumbs_down INTEGER DEFAULT 0,
+                    created_at REAL DEFAULT (julianday('now')),
+                    UNIQUE(category, unique_id)
+                )
+            """)
+            
+            # Keywords table (for item search)
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS item_keywords (
+                    item_id INTEGER NOT NULL,
+                    keyword TEXT NOT NULL,
+                    PRIMARY KEY (item_id, keyword),
+                    FOREIGN KEY (item_id) REFERENCES items(item_id) ON DELETE CASCADE
+                )
+            """)
+            
+            # Create indexes for performance
+            cursor.execute("""
+                CREATE INDEX IF NOT EXISTS idx_items_seller 
+                ON items(seller_id)
+            """)
+            
+            cursor.execute("""
+                CREATE INDEX IF NOT EXISTS idx_items_category 
+                ON items(category)
+            """)
+            
+            cursor.execute("""
+                CREATE INDEX IF NOT EXISTS idx_items_category_unique 
+                ON items(category, unique_id)
+            """)
+            
+            cursor.execute("""
+                CREATE INDEX IF NOT EXISTS idx_keywords_keyword 
+                ON item_keywords(keyword)
+            """)
+    
+    def _get_next_unique_id(self, cursor, category: int) -> int:
+        """Get the next unique_id for a given category."""
+        cursor.execute("""
+            SELECT MAX(unique_id) FROM items WHERE category = ?
+        """, (category,))
+        
+        row = cursor.fetchone()
+        max_id = row[0] if row[0] is not None else 0
+        return max_id + 1
     
     # =========================================================================
     # Item Operations
@@ -116,63 +165,73 @@ class ProductStorage:
         
         Returns the assigned item_id (category, unique_id).
         """
-        with self._lock:
+        with self._get_cursor() as cursor:
             # Generate unique ID within category
-            if category not in self._next_item_id:
-                self._next_item_id[category] = 1
+            unique_id = self._get_next_unique_id(cursor, category)
             
-            unique_id = self._next_item_id[category]
-            self._next_item_id[category] += 1
+            # Insert item
+            cursor.execute("""
+                INSERT INTO items (category, unique_id, seller_id, name, condition, sale_price, quantity)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+            """, (category, unique_id, seller_id, name, condition, sale_price, quantity))
             
-            item_id = (category, unique_id)
-            item_id_str = self._item_id_to_str(item_id)
+            item_id = cursor.lastrowid
             
-            # Create item
-            item = Item(
-                item_id=item_id,
-                name=name,
-                category=category,
-                keywords=keywords,
-                condition=condition,
-                sale_price=sale_price,
-                quantity=quantity,
-                seller_id=seller_id
-            )
+            # Insert keywords
+            for keyword in keywords:
+                cursor.execute("""
+                    INSERT INTO item_keywords (item_id, keyword)
+                    VALUES (?, ?)
+                """, (item_id, keyword.lower()))
             
-            # Store item
-            self._items[item_id_str] = item
-            
-            # Update seller index
-            if seller_id not in self._seller_items:
-                self._seller_items[seller_id] = []
-            self._seller_items[seller_id].append(item_id_str)
-            
-            # Update category index
-            if category not in self._category_items:
-                self._category_items[category] = []
-            self._category_items[category].append(item_id_str)
-            
-            self._save_data()
-            return item_id
+            return (category, unique_id)
     
-    def get_item(self, item_id: tuple) -> Optional[Item]:
+    def get_item(self, item_id: tuple) -> Optional[Dict]:
         """Get item by ID."""
-        with self._lock:
-            item_id_str = self._item_id_to_str(item_id)
-            return self._items.get(item_id_str)
+        with self._get_cursor() as cursor:
+            category, unique_id = item_id
+            
+            cursor.execute("""
+                SELECT item_id, category, unique_id, seller_id, name, condition, 
+                       sale_price, quantity, thumbs_up, thumbs_down
+                FROM items
+                WHERE category = ? AND unique_id = ?
+            """, (category, unique_id))
+            
+            row = cursor.fetchone()
+            if not row:
+                return None
+            
+            # Get keywords
+            cursor.execute("""
+                SELECT keyword FROM item_keywords WHERE item_id = ?
+            """, (row[0],))
+            keywords = [kw[0] for kw in cursor.fetchall()]
+            
+            return {
+                'item_id': (row[1], row[2]),
+                'name': row[4],
+                'category': row[1],
+                'keywords': keywords,
+                'condition': row[5],
+                'sale_price': row[6],
+                'quantity': row[7],
+                'seller_id': row[3],
+                'thumbs_up': row[8],
+                'thumbs_down': row[9]
+            }
     
     def update_item_price(self, item_id: tuple, new_price: float) -> bool:
         """Update an item's price."""
-        with self._lock:
-            item_id_str = self._item_id_to_str(item_id)
-            item = self._items.get(item_id_str)
+        with self._get_cursor() as cursor:
+            category, unique_id = item_id
             
-            if not item:
-                return False
+            cursor.execute("""
+                UPDATE items SET sale_price = ?
+                WHERE category = ? AND unique_id = ?
+            """, (new_price, category, unique_id))
             
-            item.sale_price = new_price
-            self._save_data()
-            return True
+            return cursor.rowcount > 0
     
     def update_item_quantity(self, item_id: tuple, quantity_change: int) -> Optional[int]:
         """
@@ -185,45 +244,85 @@ class ProductStorage:
         Returns:
             New quantity if successful, None if item not found or invalid quantity
         """
-        with self._lock:
-            item_id_str = self._item_id_to_str(item_id)
-            item = self._items.get(item_id_str)
+        with self._get_cursor() as cursor:
+            category, unique_id = item_id
             
-            if not item:
+            # Get current quantity
+            cursor.execute("""
+                SELECT quantity FROM items 
+                WHERE category = ? AND unique_id = ?
+            """, (category, unique_id))
+            
+            row = cursor.fetchone()
+            if not row:
                 return None
             
-            new_quantity = item.quantity + quantity_change
-            if new_quantity < 0:
+            current_qty = row[0]
+            new_qty = current_qty + quantity_change
+            
+            if new_qty < 0:
                 return None
             
-            item.quantity = new_quantity
-            self._save_data()
-            return new_quantity
+            # Update quantity
+            cursor.execute("""
+                UPDATE items SET quantity = ?
+                WHERE category = ? AND unique_id = ?
+            """, (new_qty, category, unique_id))
+            
+            return new_qty
     
     def update_item_feedback(self, item_id: tuple, thumbs_up: bool) -> bool:
         """Update an item's feedback."""
-        with self._lock:
-            item_id_str = self._item_id_to_str(item_id)
-            item = self._items.get(item_id_str)
-            
-            if not item:
-                return False
+        with self._get_cursor() as cursor:
+            category, unique_id = item_id
             
             if thumbs_up:
-                item.thumbs_up += 1
+                cursor.execute("""
+                    UPDATE items SET thumbs_up = thumbs_up + 1
+                    WHERE category = ? AND unique_id = ?
+                """, (category, unique_id))
             else:
-                item.thumbs_down += 1
+                cursor.execute("""
+                    UPDATE items SET thumbs_down = thumbs_down + 1
+                    WHERE category = ? AND unique_id = ?
+                """, (category, unique_id))
             
-            self._save_data()
-            return True
+            return cursor.rowcount > 0
     
-    def get_seller_items(self, seller_id: int) -> List[Item]:
+    def get_seller_items(self, seller_id: int) -> List[Dict]:
         """Get all items for a seller."""
-        with self._lock:
-            item_ids = self._seller_items.get(seller_id, [])
-            return [self._items[item_id] for item_id in item_ids if item_id in self._items]
+        with self._get_cursor() as cursor:
+            cursor.execute("""
+                SELECT item_id, category, unique_id, seller_id, name, condition,
+                       sale_price, quantity, thumbs_up, thumbs_down
+                FROM items
+                WHERE seller_id = ?
+            """, (seller_id,))
+            
+            items = []
+            for row in cursor.fetchall():
+                # Get keywords
+                cursor.execute("""
+                    SELECT keyword FROM item_keywords WHERE item_id = ?
+                """, (row[0],))
+                keywords = [kw[0] for kw in cursor.fetchall()]
+                
+                items.append({
+                    'item_id': (row[1], row[2]),
+                    'name': row[4],
+                    'category': row[1],
+                    'keywords': keywords,
+                    'condition': row[5],
+                    'sale_price': row[6],
+                    'quantity': row[7],
+                    'seller_id': row[3],
+                    'thumbs_up': row[8],
+                    'thumbs_down': row[9]
+                })
+            
+            return items
     
-    def search_items(self, category: int, keywords: List[str]) -> List[Item]:
+    def search_items(self, category: int, keywords: List[str]) -> List[Dict]:
         """
         Search for items by category and keywords.
         
@@ -237,16 +336,29 @@ class ProductStorage:
         4. Ties broken by: price (ascending), then item_id
         5. Only items with quantity > 0 are returned
         """
-        with self._lock:
-            # Get all items in category
-            item_ids = self._category_items.get(category, [])
+        with self._get_cursor() as cursor:
+            # Get all items in category with quantity > 0
+            cursor.execute("""
+                SELECT item_id, category, unique_id, seller_id, name, condition,
+                       sale_price, quantity, thumbs_up, thumbs_down
+                FROM items
+                WHERE category = ? AND quantity > 0
+            """, (category,))
             
+            items_data = cursor.fetchall()
             scored_items = []
             
-            for item_id_str in item_ids:
-                item = self._items.get(item_id_str)
-                if not item or item.quantity <= 0:
-                    continue
+            for row in items_data:
+                db_item_id = row[0]
+                item_id = (row[1], row[2])
+                name = row[4]
+                price = row[6]
+                
+                # Get keywords for this item
+                cursor.execute("""
+                    SELECT keyword FROM item_keywords WHERE item_id = ?
+                """, (db_item_id,))
+                item_keywords = [kw[0] for kw in cursor.fetchall()]
                 
                 # Calculate match score
                 score = 0
@@ -256,7 +368,7 @@ class ProductStorage:
                         search_kw_lower = search_kw.lower()
                         
                         # Check item keywords
-                        for item_kw in item.keywords:
+                        for item_kw in item_keywords:
                             item_kw_lower = item_kw.lower()
                             
                             if search_kw_lower == item_kw_lower:
@@ -267,70 +379,36 @@ class ProductStorage:
                                 score += 1
                         
                         # Check item name
-                        if search_kw_lower in item.name.lower():
+                        if search_kw_lower in name.lower():
                             score += 2
                 else:
                     # No keywords - all items in category match
                     score = 1
                 
                 if score > 0 or not keywords:
-                    scored_items.append((score, item.sale_price, item.item_id, item))
+                    item_dict = {
+                        'item_id': item_id,
+                        'name': name,
+                        'category': row[1],
+                        'keywords': item_keywords,
+                        'condition': row[5],
+                        'sale_price': price,
+                        'quantity': row[7],
+                        'seller_id': row[3],
+                        'thumbs_up': row[8],
+                        'thumbs_down': row[9]
+                    }
+                    scored_items.append((score, price, item_id, item_dict))
             
             # Sort by score (desc), then price (asc), then item_id
             scored_items.sort(key=lambda x: (-x[0], x[1], x[2]))
             
             return [item for _, _, _, item in scored_items]
     
-    # =========================================================================
-    # Persistence
-    # =========================================================================
-    
-    def _save_data(self) -> None:
-        """Save data to persistence file."""
-        if not self._persistence_file:
-            return
-        
-        try:
-            # Convert items to serializable format
-            items_data = {}
-            for item_id_str, item in self._items.items():
-                item_dict = asdict(item)
-                item_dict["item_id"] = list(item.item_id)  # Convert tuple to list
-                items_data[item_id_str] = item_dict
-            
-            data = {
-                "items": items_data,
-                "seller_items": self._seller_items,
-                "category_items": self._category_items,
-                "next_item_id": self._next_item_id,
-            }
-            
-            with open(self._persistence_file, 'w') as f:
-                json.dump(data, f, indent=2)
-                
-        except Exception as e:
-            logger.error(f"Failed to save data: {e}")
-    
-    def _load_data(self) -> None:
-        """Load data from persistence file."""
-        try:
-            with open(self._persistence_file, 'r') as f:
-                data = json.load(f)
-            
-            # Restore items
-            for item_id_str, item_data in data.get("items", {}).items():
-                item_data["item_id"] = tuple(item_data["item_id"])
-                self._items[item_id_str] = Item(**item_data)
-            
-            # Restore indexes
-            self._seller_items = {int(k): v for k, v in data.get("seller_items", {}).items()}
-            self._category_items = {int(k): v for k, v in data.get("category_items", {}).items()}
-            self._next_item_id = {int(k): v for k, v in data.get("next_item_id", {}).items()}
-            
-            logger.info(f"Loaded {len(self._items)} items")
-            
-        except Exception as e:
-            logger.error(f"Failed to load data: {e}")
+    def close(self):
+        """Close database connections."""
+        if hasattr(self.local, 'connection'):
+            self.local.connection.close()
 
 
 # =============================================================================
@@ -348,14 +426,14 @@ class ProductDBServer:
     RECV_BUFFER = 4096
     
     def __init__(self, host: str = "0.0.0.0", port: int = 5004,
-                 persistence_file: Optional[str] = None):
+                 db_path: str = "products.db"):
         """
         Initialize the database server.
         
         Args:
             host: Host to bind to
             port: Port to listen on
-            persistence_file: Optional file for data persistence
+            db_path: Path to SQLite database file
         """
         self.host = host
         self.port = port
@@ -363,7 +441,7 @@ class ProductDBServer:
         self._running = False
         
         # Initialize storage
-        self._storage = ProductStorage(persistence_file)
+        self._storage = ProductStorage(db_path)
         
         # Operation handlers
         self._handlers: Dict[str, Callable] = {
@@ -414,6 +492,7 @@ class ProductDBServer:
         self._running = False
         if self._socket:
             self._socket.close()
+        self._storage.close()
         logger.info("Product DB server stopped")
     
     def _handle_client(self, client_socket: socket.socket, address: tuple) -> None:
@@ -495,18 +574,18 @@ class ProductDBServer:
     def _error(self, message: str) -> dict:
         return {"status": "error", "error_message": message}
     
-    def _item_to_dict(self, item: Item) -> dict:
-        """Convert Item to dictionary for JSON response."""
+    def _item_to_dict(self, item: Dict) -> dict:
+        """Convert Item dict to response format."""
         return {
-            "item_id": list(item.item_id),
-            "name": item.name,
-            "category": item.category,
-            "keywords": item.keywords,
-            "condition": item.condition,
-            "sale_price": item.sale_price,
-            "quantity": item.quantity,
-            "seller_id": item.seller_id,
-            "feedback": [item.thumbs_up, item.thumbs_down]
+            "item_id": list(item["item_id"]),
+            "name": item["name"],
+            "category": item["category"],
+            "keywords": item["keywords"],
+            "condition": item["condition"],
+            "sale_price": item["sale_price"],
+            "quantity": item["quantity"],
+            "seller_id": item["seller_id"],
+            "feedback": [item["thumbs_up"], item["thumbs_down"]]
         }
     
     # =========================================================================
@@ -584,14 +663,14 @@ def main():
     parser = argparse.ArgumentParser(description="Product Database Server")
     parser.add_argument("--host", default="0.0.0.0", help="Host to bind to")
     parser.add_argument("--port", type=int, default=5004, help="Port to listen on")
-    parser.add_argument("--data-file", default=None, help="File for data persistence")
+    parser.add_argument("--db-path", default="products.db", help="SQLite database file path")
     
     args = parser.parse_args()
     
     server = ProductDBServer(
         host=args.host,
         port=args.port,
-        persistence_file=args.data_file
+        db_path=args.db_path
     )
     
     try:

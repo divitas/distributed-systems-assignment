@@ -1,16 +1,8 @@
 """
-test_performance.py - Performance Evaluation for Assignment
+test_performance_progressive.py - Progressive Performance Testing
 
-This script measures:
-1. Average Response Time
-2. Average Server Throughput
-
-For three scenarios:
-- Scenario 1: 1 seller, 1 buyer
-- Scenario 2: 10 sellers, 10 buyers
-- Scenario 3: 100 sellers, 100 buyers
-
-Each scenario runs 10 iterations with 1000 API calls per client.
+Starts with minimal load and gradually increases to identify bottlenecks.
+Much simpler than the full test suite - focuses on core metrics.
 """
 
 import sys
@@ -41,367 +33,240 @@ class Config:
     buyer_server_port: int = 5001
     seller_server_host: str = "localhost"
     seller_server_port: int = 5002
-    
-    # Test parameters
-    num_iterations: int = 10
-    operations_per_client: int = 1000
 
 
 CONFIG = Config()
 
 
 # =============================================================================
-# Metrics Collection
+# Simple Metrics
 # =============================================================================
 
 @dataclass
-class ClientMetrics:
-    """Metrics for a single client."""
-    client_id: int
-    client_type: str  # "buyer" or "seller"
+class SimpleMetrics:
+    """Simple metrics collection."""
     response_times: List[float] = field(default_factory=list)
     operations_completed: int = 0
     errors: int = 0
-    start_time: float = 0
-    end_time: float = 0
+    
+    def record_operation(self, response_time: float, success: bool = True):
+        """Record a single operation."""
+        if success:
+            self.response_times.append(response_time)
+            self.operations_completed += 1
+        else:
+            self.errors += 1
     
     @property
-    def total_time(self) -> float:
-        return self.end_time - self.start_time
-    
-    @property
-    def throughput(self) -> float:
-        if self.total_time > 0:
-            return self.operations_completed / self.total_time
-        return 0
-    
-    @property
-    def avg_response_time(self) -> float:
+    def avg_response_time_ms(self) -> float:
         if self.response_times:
-            return statistics.mean(self.response_times)
+            return statistics.mean(self.response_times) * 1000
         return 0
     
     @property
-    def median_response_time(self) -> float:
+    def median_response_time_ms(self) -> float:
         if self.response_times:
-            return statistics.median(self.response_times)
+            return statistics.median(self.response_times) * 1000
         return 0
-
-
-@dataclass
-class ScenarioResults:
-    """Results for a complete scenario."""
-    scenario_name: str
-    num_sellers: int
-    num_buyers: int
-    num_iterations: int
-    ops_per_client: int
-    client_metrics: List[ClientMetrics] = field(default_factory=list)
-    iteration_times: List[float] = field(default_factory=list)
-    
-    def add_metrics(self, metrics: ClientMetrics):
-        self.client_metrics.append(metrics)
-    
-    @property
-    def total_operations(self) -> int:
-        return sum(m.operations_completed for m in self.client_metrics)
-    
-    @property
-    def total_errors(self) -> int:
-        return sum(m.errors for m in self.client_metrics)
-    
-    @property
-    def all_response_times(self) -> List[float]:
-        times = []
-        for m in self.client_metrics:
-            times.extend(m.response_times)
-        return times
-    
-    @property
-    def avg_response_time(self) -> float:
-        times = self.all_response_times
-        if times:
-            return statistics.mean(times) * 1000  # Convert to ms
-        return 0
-    
-    @property
-    def median_response_time(self) -> float:
-        times = self.all_response_times
-        if times:
-            return statistics.median(times) * 1000  # Convert to ms
-        return 0
-    
-    @property
-    def p95_response_time(self) -> float:
-        times = sorted(self.all_response_times)
-        if times:
-            idx = int(len(times) * 0.95)
-            return times[idx] * 1000  # Convert to ms
-        return 0
-    
-    @property
-    def avg_throughput(self) -> float:
-        """Average throughput across all iterations."""
-        if self.iteration_times:
-            total_ops = self.total_operations
-            total_time = sum(self.iteration_times)
-            if total_time > 0:
-                return total_ops / total_time
-        return 0
-    
-    def print_summary(self):
-        print(f"\n{'='*70}")
-        print(f"SCENARIO: {self.scenario_name}")
-        print(f"{'='*70}")
-        print(f"Configuration:")
-        print(f"  Sellers: {self.num_sellers}")
-        print(f"  Buyers: {self.num_buyers}")
-        print(f"  Iterations: {self.num_iterations}")
-        print(f"  Operations per client: {self.ops_per_client}")
-        print(f"\nResults:")
-        print(f"  Total Operations: {self.total_operations}")
-        print(f"  Total Errors: {self.total_errors}")
-        print(f"\nResponse Time (milliseconds):")
-        print(f"  Average: {self.avg_response_time:.2f} ms")
-        print(f"  Median:  {self.median_response_time:.2f} ms")
-        print(f"  95th %%:  {self.p95_response_time:.2f} ms")
-        print(f"\nThroughput:")
-        print(f"  Average: {self.avg_throughput:.2f} operations/second")
-        print(f"{'='*70}")
 
 
 # =============================================================================
-# Client Workloads
+# Simple Workloads
 # =============================================================================
 
-def seller_workload(client_id: int, num_operations: int) -> ClientMetrics:
+def simple_seller_workload(client_id: int, num_operations: int, metrics: SimpleMetrics):
     """
-    Execute seller workload and collect metrics.
-    
-    Workload mix:
-    - 20% RegisterItem
-    - 30% DisplayItems
-    - 25% ChangePrice
-    - 25% UpdateUnits
+    Simple seller workload - just register items and display them.
     """
-    metrics = ClientMetrics(client_id=client_id, client_type="seller")
-    
     try:
+        print(f"    Seller {client_id}: Connecting...", flush=True)
         client = SellerClient(CONFIG.seller_server_host, CONFIG.seller_server_port)
         client.connect()
         api = SellerAPI(client)
         
-        # Create account and login
-        username = f"perf_seller_{client_id}_{time.time()}"
+        # Create account
+        username = f"s{client_id}_{int(time.time()) % 100000}"
+        print(f"    Seller {client_id}: Creating account {username}...", flush=True)
         api.create_account(username, "pass")
         api.login(username, "pass")
+        print(f"    Seller {client_id}: Logged in", flush=True)
         
-        # Track registered items for price/quantity updates
-        registered_items = []
-        
-        metrics.start_time = time.time()
-        
+        # Perform operations
         for i in range(num_operations):
             op_start = time.time()
             
             try:
-                # Decide which operation based on distribution
-                op_choice = i % 20
-                
-                if op_choice < 4 or len(registered_items) == 0:
-                    # 20% - Register new item
-                    item_id = api.register_item(
-                        name=f"Item_{client_id}_{i}",
+                if i % 2 == 0:
+                    # Register item
+                    api.register_item(
+                        name=f"Item{client_id}_{i}",
                         category=(i % 10) + 1,
-                        keywords=["perf", "test"],
-                        condition="New" if i % 2 == 0 else "Used",
-                        sale_price=10.0 + (i % 100),
-                        quantity=100
+                        keywords=["test"],
+                        condition="New",
+                        sale_price=10.0 + i,
+                        quantity=10
                     )
-                    registered_items.append(item_id)
-                    
-                elif op_choice < 10:
-                    # 30% - Display items
-                    api.display_items_for_sale()
-                    
-                elif op_choice < 15:
-                    # 25% - Change price
-                    if registered_items:
-                        item_id = registered_items[i % len(registered_items)]
-                        api.change_item_price(item_id, 15.0 + (i % 50))
-                        
                 else:
-                    # 25% - Update units (but keep some available)
-                    if registered_items:
-                        item_id = registered_items[i % len(registered_items)]
-                        try:
-                            api.update_units_for_sale(item_id, 1)
-                        except:
-                            pass  # May fail if no units left
+                    # Display items
+                    api.display_items_for_sale()
                 
                 op_end = time.time()
-                metrics.response_times.append(op_end - op_start)
-                metrics.operations_completed += 1
+                metrics.record_operation(op_end - op_start, success=True)
+                
+                if (i + 1) % 10 == 0:
+                    print(f"    Seller {client_id}: {i + 1}/{num_operations} ops", flush=True)
                 
             except Exception as e:
-                metrics.errors += 1
+                print(f"    Seller {client_id}: Operation {i} failed: {e}", flush=True)
+                metrics.record_operation(0, success=False)
         
-        metrics.end_time = time.time()
-        
+        print(f"    Seller {client_id}: Logging out...", flush=True)
         api.logout()
         client.disconnect()
+        print(f"    Seller {client_id}: Done!", flush=True)
         
     except Exception as e:
-        print(f"Seller {client_id} error: {e}")
+        print(f"    Seller {client_id}: CRITICAL ERROR: {e}", flush=True)
         metrics.errors += 1
-    
-    return metrics
 
 
-def buyer_workload(client_id: int, num_operations: int) -> ClientMetrics:
+def simple_buyer_workload(client_id: int, num_operations: int, metrics: SimpleMetrics):
     """
-    Execute buyer workload and collect metrics.
-    
-    Workload mix:
-    - 40% Search
-    - 20% GetItem
-    - 20% AddToCart
-    - 10% DisplayCart
-    - 10% RemoveFromCart
+    Simple buyer workload - just search and view items.
     """
-    metrics = ClientMetrics(client_id=client_id, client_type="buyer")
-    
     try:
+        print(f"    Buyer {client_id}: Connecting...", flush=True)
         client = BuyerClient(CONFIG.buyer_server_host, CONFIG.buyer_server_port)
         client.connect()
         api = BuyerAPI(client)
         
-        # Create account and login
-        username = f"perf_buyer_{client_id}_{time.time()}"
+        # Create account
+        username = f"b{client_id}_{int(time.time()) % 100000}"
+        print(f"    Buyer {client_id}: Creating account {username}...", flush=True)
         api.create_account(username, "pass")
         api.login(username, "pass")
+        print(f"    Buyer {client_id}: Logged in", flush=True)
         
-        # Track items found for cart operations
-        found_items = []
-        
-        metrics.start_time = time.time()
-        
+        # Perform operations
         for i in range(num_operations):
             op_start = time.time()
             
             try:
-                op_choice = i % 10
-                
-                if op_choice < 4:
-                    # 40% - Search
-                    category = (i % 10) + 1
-                    items = api.search_items(category=category, keywords=["perf"])
-                    if items:
-                        found_items.extend([item.item_id for item in items[:3]])
-                        
-                elif op_choice < 6:
-                    # 20% - GetItem
-                    if found_items:
-                        item_id = found_items[i % len(found_items)]
-                        api.get_item(item_id)
-                        
-                elif op_choice < 8:
-                    # 20% - AddToCart
-                    if found_items:
-                        item_id = found_items[i % len(found_items)]
-                        try:
-                            api.add_to_cart(item_id, 1)
-                        except:
-                            pass  # May fail if not available
-                        
-                elif op_choice < 9:
-                    # 10% - DisplayCart
+                if i % 3 == 0:
+                    # Search
+                    api.search_items(category=(i % 10) + 1, keywords=["test"])
+                elif i % 3 == 1:
+                    # Display cart
                     api.display_cart()
-                    
                 else:
-                    # 10% - RemoveFromCart
-                    cart = api.display_cart()
-                    if cart:
-                        try:
-                            api.remove_from_cart(cart[0].item_id, 1)
-                        except:
-                            pass
+                    # Search with different category
+                    api.search_items(category=1, keywords=[])
                 
                 op_end = time.time()
-                metrics.response_times.append(op_end - op_start)
-                metrics.operations_completed += 1
+                metrics.record_operation(op_end - op_start, success=True)
+                
+                if (i + 1) % 10 == 0:
+                    print(f"    Buyer {client_id}: {i + 1}/{num_operations} ops", flush=True)
                 
             except Exception as e:
-                metrics.errors += 1
+                print(f"    Buyer {client_id}: Operation {i} failed: {e}", flush=True)
+                metrics.record_operation(0, success=False)
         
-        metrics.end_time = time.time()
-        
+        print(f"    Buyer {client_id}: Logging out...", flush=True)
         api.logout()
         client.disconnect()
+        print(f"    Buyer {client_id}: Done!", flush=True)
         
     except Exception as e:
-        print(f"Buyer {client_id} error: {e}")
+        print(f"    Buyer {client_id}: CRITICAL ERROR: {e}", flush=True)
         metrics.errors += 1
-    
-    return metrics
 
 
 # =============================================================================
-# Scenario Execution
+# Test Scenarios
 # =============================================================================
 
-def run_scenario(name: str, num_sellers: int, num_buyers: int, 
-                 num_iterations: int, ops_per_client: int) -> ScenarioResults:
-    """Run a complete scenario with multiple iterations."""
+def run_simple_test(name: str, num_sellers: int, num_buyers: int, ops_per_client: int):
+    """
+    Run a simple test scenario.
+    """
+    print(f"\n{'='*80}")
+    print(f"TEST: {name}")
+    print(f"  Sellers: {num_sellers}, Buyers: {num_buyers}")
+    print(f"  Operations per client: {ops_per_client}")
+    print(f"{'='*80}")
     
-    results = ScenarioResults(
-        scenario_name=name,
-        num_sellers=num_sellers,
-        num_buyers=num_buyers,
-        num_iterations=num_iterations,
-        ops_per_client=ops_per_client
-    )
+    # Create metrics objects
+    seller_metrics = [SimpleMetrics() for _ in range(num_sellers)]
+    buyer_metrics = [SimpleMetrics() for _ in range(num_buyers)]
     
-    print(f"\n{'#'*70}")
-    print(f"Running: {name}")
-    print(f"  {num_sellers} sellers, {num_buyers} buyers")
-    print(f"  {num_iterations} iterations, {ops_per_client} ops/client")
-    print(f"{'#'*70}")
+    start_time = time.time()
     
-    for iteration in range(num_iterations):
-        print(f"\n  Iteration {iteration + 1}/{num_iterations}...", end=" ", flush=True)
+    # Run clients
+    with ThreadPoolExecutor(max_workers=num_sellers + num_buyers) as executor:
+        futures = []
         
-        iteration_start = time.time()
+        # Submit sellers
+        for i in range(num_sellers):
+            future = executor.submit(simple_seller_workload, i, ops_per_client, seller_metrics[i])
+            futures.append(future)
         
-        # Run all clients concurrently
-        with ThreadPoolExecutor(max_workers=num_sellers + num_buyers) as executor:
-            futures = []
-            
-            # Submit seller tasks
-            for i in range(num_sellers):
-                future = executor.submit(seller_workload, i, ops_per_client)
-                futures.append(future)
-            
-            # Submit buyer tasks
-            for i in range(num_buyers):
-                future = executor.submit(buyer_workload, i + num_sellers, ops_per_client)
-                futures.append(future)
-            
-            # Collect results
-            for future in as_completed(futures):
-                try:
-                    metrics = future.result()
-                    results.add_metrics(metrics)
-                except Exception as e:
-                    print(f"Task error: {e}")
+        # Submit buyers
+        for i in range(num_buyers):
+            future = executor.submit(simple_buyer_workload, i, ops_per_client, buyer_metrics[i])
+            futures.append(future)
         
-        iteration_end = time.time()
-        iteration_time = iteration_end - iteration_start
-        results.iteration_times.append(iteration_time)
-        
-        print(f"done ({iteration_time:.2f}s)")
+        # Wait for completion
+        print("\n  Waiting for clients to complete...")
+        for future in as_completed(futures):
+            try:
+                future.result()
+            except Exception as e:
+                print(f"  Task failed: {e}")
     
-    return results
+    end_time = time.time()
+    total_time = end_time - start_time
+    
+    # Aggregate metrics
+    all_response_times = []
+    total_ops = 0
+    total_errors = 0
+    
+    for m in seller_metrics + buyer_metrics:
+        all_response_times.extend(m.response_times)
+        total_ops += m.operations_completed
+        total_errors += m.errors
+    
+    # Print results
+    print(f"\n{'='*80}")
+    print(f"RESULTS: {name}")
+    print(f"{'='*80}")
+    print(f"Total Time:          {total_time:.2f} seconds")
+    print(f"Total Operations:    {total_ops}")
+    print(f"Total Errors:        {total_errors}")
+    
+    if all_response_times:
+        avg_rt = statistics.mean(all_response_times) * 1000
+        median_rt = statistics.median(all_response_times) * 1000
+        throughput = total_ops / total_time if total_time > 0 else 0
+        
+        print(f"\nResponse Times:")
+        print(f"  Average:           {avg_rt:.2f} ms")
+        print(f"  Median:            {median_rt:.2f} ms")
+        print(f"\nThroughput:          {throughput:.2f} ops/sec")
+    else:
+        print("\nNo operations completed!")
+    
+    print(f"{'='*80}\n")
+    
+    return {
+        'name': name,
+        'total_time': total_time,
+        'total_ops': total_ops,
+        'total_errors': total_errors,
+        'avg_response_time_ms': statistics.mean(all_response_times) * 1000 if all_response_times else 0,
+        'throughput': total_ops / total_time if total_time > 0 else 0
+    }
 
 
 # =============================================================================
@@ -409,140 +274,153 @@ def run_scenario(name: str, num_sellers: int, num_buyers: int,
 # =============================================================================
 
 def main():
-    print("\n" + "=" * 70)
-    print("PERFORMANCE EVALUATION")
-    print("=" * 70)
-    print("\nThis will run three scenarios as required by the assignment:")
-    print("  Scenario 1: 1 seller, 1 buyer")
-    print("  Scenario 2: 10 sellers, 10 buyers")
-    print("  Scenario 3: 100 sellers, 100 buyers")
-    print(f"\nEach scenario: {CONFIG.num_iterations} iterations, "
-          f"{CONFIG.operations_per_client} operations/client")
+    print("\n" + "=" * 80)
+    print("PROGRESSIVE PERFORMANCE TESTING")
+    print("=" * 80)
+    print("\nThis will run tests with gradually increasing load:")
+    print("  Phase 1: Single client smoke tests")
+    print("  Phase 2: Small load (2-5 clients)")
+    print("  Phase 3: Medium load (10-20 clients)")
+    print("  Phase 4: Large load (50-100 clients)")
     
-    # Verify servers are running
+    # Verify servers
     import socket
-    servers = [
+    print("\nVerifying server connectivity...")
+    for name, host, port in [
         ("Buyer Server", CONFIG.buyer_server_host, CONFIG.buyer_server_port),
         ("Seller Server", CONFIG.seller_server_host, CONFIG.seller_server_port),
-    ]
-    
-    for name, host, port in servers:
+    ]:
         try:
             sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             sock.settimeout(2)
             sock.connect((host, port))
             sock.close()
+            print(f"  ✓ {name} at {host}:{port}")
         except:
-            print(f"\nERROR: {name} not running on {host}:{port}")
-            print("Please start all servers first.")
+            print(f"\n✗ ERROR: {name} not running on {host}:{port}")
             return 1
     
-    input("\nPress Enter to start performance tests...")
+    input("\nPress Enter to start progressive testing...")
     
-    all_results = []
+    results = []
     
-    # Scenario 1: 1 seller, 1 buyer
-    results1 = run_scenario(
-        "Scenario 1: 1 Seller, 1 Buyer",
-        num_sellers=1,
-        num_buyers=1,
-        num_iterations=CONFIG.num_iterations,
-        ops_per_client=CONFIG.operations_per_client
-    )
-    all_results.append(results1)
-    results1.print_summary()
+    # Phase 1: Smoke Tests
+    print("\n" + "#"*80)
+    print("# PHASE 1: SMOKE TESTS (Minimal Load)")
+    print("#"*80)
     
-    # Scenario 2: 10 sellers, 10 buyers
-    results2 = run_scenario(
-        "Scenario 2: 10 Sellers, 10 Buyers",
-        num_sellers=10,
-        num_buyers=10,
-        num_iterations=CONFIG.num_iterations,
-        ops_per_client=CONFIG.operations_per_client
-    )
-    all_results.append(results2)
-    results2.print_summary()
+    print("\n--- Test 1.1: Single Seller ---")
+    result = run_simple_test("1 Seller Only", num_sellers=1, num_buyers=0, ops_per_client=10)
+    results.append(result)
+    input("Press Enter to continue...")
     
-    # Scenario 3: 100 sellers, 100 buyers
-    results3 = run_scenario(
-        "Scenario 3: 100 Sellers, 100 Buyers",
-        num_sellers=100,
-        num_buyers=100,
-        num_iterations=CONFIG.num_iterations,
-        ops_per_client=CONFIG.operations_per_client
-    )
-    all_results.append(results3)
-    results3.print_summary()
+    print("\n--- Test 1.2: Single Buyer ---")
+    result = run_simple_test("1 Buyer Only", num_sellers=0, num_buyers=1, ops_per_client=10)
+    results.append(result)
+    input("Press Enter to continue...")
     
-    # Print comparison
-    print("\n" + "=" * 70)
-    print("PERFORMANCE COMPARISON")
-    print("=" * 70)
-    print(f"\n{'Scenario':<35} {'Avg Response (ms)':<20} {'Throughput (ops/s)':<20}")
-    print("-" * 75)
-    for r in all_results:
-        print(f"{r.scenario_name:<35} {r.avg_response_time:<20.2f} {r.avg_throughput:<20.2f}")
+    print("\n--- Test 1.3: 1 Seller + 1 Buyer ---")
+    result = run_simple_test("1 Seller + 1 Buyer", num_sellers=1, num_buyers=1, ops_per_client=10)
+    results.append(result)
+    input("Press Enter to continue...")
     
-    # Save results to file
-    report = {
-        "test_config": {
-            "iterations": CONFIG.num_iterations,
-            "operations_per_client": CONFIG.operations_per_client
-        },
-        "scenarios": []
-    }
+    # Phase 2: Small Load
+    print("\n" + "#"*80)
+    print("# PHASE 2: SMALL LOAD")
+    print("#"*80)
     
-    for r in all_results:
-        report["scenarios"].append({
-            "name": r.scenario_name,
-            "num_sellers": r.num_sellers,
-            "num_buyers": r.num_buyers,
-            "total_operations": r.total_operations,
-            "total_errors": r.total_errors,
-            "avg_response_time_ms": r.avg_response_time,
-            "median_response_time_ms": r.median_response_time,
-            "p95_response_time_ms": r.p95_response_time,
-            "avg_throughput_ops_per_sec": r.avg_throughput
-        })
+    print("\n--- Test 2.1: 2 Sellers + 2 Buyers ---")
+    result = run_simple_test("2 Sellers + 2 Buyers", num_sellers=2, num_buyers=2, ops_per_client=50)
+    results.append(result)
+    input("Press Enter to continue...")
     
-    with open("performance_results.json", "w") as f:
-        json.dump(report, f, indent=2)
+    print("\n--- Test 2.2: 5 Sellers + 5 Buyers ---")
+    result = run_simple_test("5 Sellers + 5 Buyers", num_sellers=5, num_buyers=5, ops_per_client=50)
+    results.append(result)
+    input("Press Enter to continue...")
     
-    print(f"\nResults saved to: performance_results.json")
+    # Phase 3: Medium Load
+    print("\n" + "#"*80)
+    print("# PHASE 3: MEDIUM LOAD")
+    print("#"*80)
     
-    # Print insights
-    print("\n" + "=" * 70)
-    print("ANALYSIS & INSIGHTS")
-    print("=" * 70)
+    print("\n--- Test 3.1: 10 Sellers + 10 Buyers ---")
+    result = run_simple_test("10 Sellers + 10 Buyers", num_sellers=10, num_buyers=10, ops_per_client=100)
+    results.append(result)
+    input("Press Enter to continue...")
     
+    print("\n--- Test 3.2: 20 Sellers + 20 Buyers ---")
+    result = run_simple_test("20 Sellers + 20 Buyers", num_sellers=20, num_buyers=20, ops_per_client=100)
+    results.append(result)
+    input("Press Enter to continue...")
+    
+    # Phase 4: Large Load (if user wants to continue)
+    response = input("\nContinue to large load tests? (y/n): ")
+    if response.lower() == 'y':
+        print("\n" + "#"*80)
+        print("# PHASE 4: LARGE LOAD")
+        print("#"*80)
+        
+        print("\n--- Test 4.1: 50 Sellers + 50 Buyers ---")
+        result = run_simple_test("50 Sellers + 50 Buyers", num_sellers=50, num_buyers=50, ops_per_client=100)
+        results.append(result)
+        input("Press Enter to continue...")
+        
+        print("\n--- Test 4.2: 100 Sellers + 100 Buyers ---")
+        result = run_simple_test("100 Sellers + 100 Buyers", num_sellers=100, num_buyers=100, ops_per_client=100)
+        results.append(result)
+    
+    # Print summary
+    print("\n" + "=" * 80)
+    print("SUMMARY OF ALL TESTS")
+    print("=" * 80)
+    print(f"\n{'Test Name':<30} {'Time (s)':<12} {'Ops':<8} {'Errors':<8} {'Avg RT (ms)':<12} {'Throughput':<12}")
+    print("-" * 90)
+    
+    for r in results:
+        print(f"{r['name']:<30} {r['total_time']:<12.2f} {r['total_ops']:<8} "
+              f"{r['total_errors']:<8} {r['avg_response_time_ms']:<12.2f} {r['throughput']:<12.2f}")
+    
+    print("=" * 90)
+    
+    # Save results
+    with open("progressive_test_results.json", "w") as f:
+        json.dump(results, f, indent=2)
+    
+    print(f"\nResults saved to: progressive_test_results.json")
+    
+    # Analysis
+    print("\n" + "=" * 80)
+    print("ANALYSIS")
+    print("=" * 80)
     print("""
-Expected observations:
+What to look for:
 
-1. Response Time:
-   - Scenario 1 should have the lowest response time (minimal contention)
-   - Scenario 3 should have higher response times due to:
-     * Thread contention on server
-     * Lock contention in database storage
-     * More concurrent connections
+1. Smoke Tests (Phase 1):
+   - Should all complete successfully with low response times
+   - Establishes baseline performance
+   - If these fail, there's a basic server/client issue
 
-2. Throughput:
-   - Scenario 1: Lower total throughput (only 2 clients)
-   - Scenario 2: Higher throughput due to parallelism
-   - Scenario 3: May show diminishing returns due to:
-     * Server thread pool limits
-     * Database lock contention
-     * Context switching overhead
+2. Small Load (Phase 2):
+   - Response times should remain relatively stable
+   - Throughput should scale roughly linearly
+   - Errors should remain at 0
 
-3. Scaling Analysis:
-   - Linear scaling would mean 100x clients = 100x throughput
-   - Sub-linear scaling is expected due to synchronization overhead
-   - Response time increase indicates bottlenecks
+3. Medium Load (Phase 3):
+   - May see slight increase in response times
+   - Throughput scaling may start to level off
+   - Should still have very low error rates
 
-Recommendations for improving performance:
-- Use connection pooling for database connections
-- Implement read-write locks instead of exclusive locks
-- Consider sharding the product database by category
-- Use async I/O instead of threads for better scalability
+4. Large Load (Phase 4):
+   - Response times will likely increase due to contention
+   - Throughput may plateau or decrease
+   - Watch for increased error rates
+
+If the system hangs:
+   - Check server logs for deadlocks
+   - Look for connection pool exhaustion
+   - Check for resource limits (threads, file descriptors)
+   - Monitor CPU and memory usage
 """)
     
     return 0

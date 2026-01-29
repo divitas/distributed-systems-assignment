@@ -1,17 +1,12 @@
 """
-customer_db_server.py - Customer Database Server
+customer_db_server.py - Optimized Customer Database Server with SQLite Backend
 
-This is a backend database server that stores and manages:
-- Buyer accounts (id, name, password, purchase history)
-- Seller accounts (id, name, password, feedback, items sold)
-- Active sessions (session_id, user_id, user_type, timestamps)
-- Shopping carts (active and saved)
-
-This server receives requests from the frontend servers (Buyer Server,
-Seller Server) and performs data operations.
-
-Storage: In-memory with optional file persistence.
-In production, you would use a real database (PostgreSQL, etc.)
+OPTIMIZATIONS:
+- Connection pooling per thread
+- Optimized SQLite PRAGMA settings
+- Better transaction management
+- Reduced lock contention
+- Fast timeout handling
 """
 
 import socket
@@ -20,11 +15,11 @@ import struct
 import threading
 import logging
 import time
-import uuid
-import os
-from typing import Dict, Optional, List, Callable, Any
-from dataclasses import dataclass, field, asdict
-from threading import Lock
+import hashlib
+import secrets
+import sqlite3
+from typing import Dict, Optional, List, Callable
+from contextlib import contextmanager
 
 logging.basicConfig(
     level=logging.INFO,
@@ -33,477 +28,461 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-# =============================================================================
-# Data Models
-# =============================================================================
-
-@dataclass
-class Buyer:
-    """Buyer account data."""
-    buyer_id: int
-    username: str
-    password: str  # In production, store hashed!
-    items_purchased: int = 0
-    purchase_history: List[tuple] = field(default_factory=list)  # List of item_ids
-
-
-@dataclass
-class Seller:
-    """Seller account data."""
-    seller_id: int
-    username: str
-    password: str  # In production, store hashed!
-    thumbs_up: int = 0
-    thumbs_down: int = 0
-    items_sold: int = 0
-
-
-@dataclass
-class Session:
-    """Active session data."""
-    session_id: str
-    user_id: int
-    user_type: str  # "buyer" or "seller"
-    created_at: float
-    last_activity: float
-
-
-@dataclass
-class CartItem:
-    """Item in shopping cart."""
-    item_id: tuple  # (category, unique_id)
-    quantity: int
-
-
-# =============================================================================
-# In-Memory Storage
-# =============================================================================
-
 class CustomerStorage:
     """
-    Thread-safe in-memory storage for customer data.
-    
-    Uses locks to ensure thread safety for concurrent access.
+    High-performance thread-safe customer database using SQLite.
     """
     
-    def __init__(self, persistence_file: Optional[str] = None):
-        """
-        Initialize storage.
+    def __init__(self, db_path: str = "customer.db"):
+        self.db_path = db_path
+        self.local = threading.local()
         
-        Args:
-            persistence_file: Optional file path for data persistence
-        """
-        self._lock = Lock()
-        self._persistence_file = persistence_file
-        
-        # Data stores
-        self._buyers: Dict[int, Buyer] = {}
-        self._sellers: Dict[int, Seller] = {}
-        self._sessions: Dict[str, Session] = {}
-        self._active_carts: Dict[str, List[CartItem]] = {}  # session_id -> cart
-        self._saved_carts: Dict[int, List[CartItem]] = {}   # buyer_id -> cart
-        
-        # Username to ID mappings for login lookup
-        self._buyer_usernames: Dict[str, int] = {}
-        self._seller_usernames: Dict[str, int] = {}
-        
-        # ID counters
-        self._next_buyer_id = 1
-        self._next_seller_id = 1
-        
-        # Load persisted data if available
-        if persistence_file and os.path.exists(persistence_file):
-            self._load_data()
+        # Initialize database schema
+        self._init_schema()
     
-    # =========================================================================
+    def _get_connection(self) -> sqlite3.Connection:
+        """Get optimized thread-local database connection."""
+        if not hasattr(self.local, 'connection'):
+            conn = sqlite3.connect(
+                self.db_path,
+                check_same_thread=False,
+                timeout=30.0,
+                isolation_level=None  # Autocommit mode for better concurrency
+            )
+            
+            # Performance optimizations
+            conn.execute("PRAGMA journal_mode = WAL")
+            conn.execute("PRAGMA synchronous = NORMAL")
+            conn.execute("PRAGMA cache_size = -64000")  # 64MB
+            conn.execute("PRAGMA temp_store = MEMORY")
+            conn.execute("PRAGMA mmap_size = 30000000000")  # 30GB mmap
+            conn.execute("PRAGMA page_size = 4096")
+            conn.execute("PRAGMA foreign_keys = ON")
+            
+            conn.row_factory = sqlite3.Row
+            self.local.connection = conn
+        
+        return self.local.connection
+    
+    @contextmanager
+    def _transaction(self):
+        """Context manager for explicit transactions."""
+        conn = self._get_connection()
+        conn.execute("BEGIN IMMEDIATE")
+        try:
+            yield conn
+            conn.execute("COMMIT")
+        except Exception:
+            conn.execute("ROLLBACK")
+            raise
+    
+    def _init_schema(self):
+        """Initialize database schema with optimized indexes."""
+        conn = sqlite3.connect(self.db_path)
+        conn.execute("PRAGMA journal_mode = WAL")
+        
+        cursor = conn.cursor()
+        
+        # Buyers table
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS buyers (
+                buyer_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                username TEXT UNIQUE NOT NULL,
+                password_hash TEXT NOT NULL,
+                items_purchased INTEGER DEFAULT 0,
+                created_at REAL DEFAULT (julianday('now'))
+            )
+        """)
+        
+        # Sellers table
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS sellers (
+                seller_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                username TEXT UNIQUE NOT NULL,
+                password_hash TEXT NOT NULL,
+                thumbs_up INTEGER DEFAULT 0,
+                thumbs_down INTEGER DEFAULT 0,
+                items_sold INTEGER DEFAULT 0,
+                created_at REAL DEFAULT (julianday('now'))
+            )
+        """)
+        
+        # Sessions table
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS sessions (
+                session_id TEXT PRIMARY KEY,
+                user_id INTEGER NOT NULL,
+                user_type TEXT NOT NULL CHECK(user_type IN ('buyer', 'seller')),
+                created_at REAL NOT NULL,
+                last_activity REAL NOT NULL
+            )
+        """)
+        
+        # Purchase history table
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS purchase_history (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                buyer_id INTEGER NOT NULL,
+                item_category INTEGER NOT NULL,
+                item_unique_id INTEGER NOT NULL,
+                purchased_at REAL DEFAULT (julianday('now')),
+                FOREIGN KEY (buyer_id) REFERENCES buyers(buyer_id) ON DELETE CASCADE
+            )
+        """)
+        
+        # Shopping carts table
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS cart_items (
+                session_id TEXT NOT NULL,
+                item_category INTEGER NOT NULL,
+                item_unique_id INTEGER NOT NULL,
+                quantity INTEGER NOT NULL,
+                added_at REAL DEFAULT (julianday('now')),
+                PRIMARY KEY (session_id, item_category, item_unique_id)
+            )
+        """)
+        
+        # Saved carts
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS saved_carts (
+                buyer_id INTEGER NOT NULL,
+                item_category INTEGER NOT NULL,
+                item_unique_id INTEGER NOT NULL,
+                quantity INTEGER NOT NULL,
+                saved_at REAL DEFAULT (julianday('now')),
+                PRIMARY KEY (buyer_id, item_category, item_unique_id),
+                FOREIGN KEY (buyer_id) REFERENCES buyers(buyer_id) ON DELETE CASCADE
+            )
+        """)
+        
+        # Create indexes
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id, user_type)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_sessions_activity ON sessions(last_activity)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_purchase_history_buyer ON purchase_history(buyer_id)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_cart_session ON cart_items(session_id)")
+        
+        conn.commit()
+        conn.close()
+    
+    def _hash_password(self, password: str) -> str:
+        """Hash a password using SHA-256."""
+        return hashlib.sha256(password.encode()).hexdigest()
+    
+    def _generate_session_id(self) -> str:
+        """Generate a unique session ID."""
+        return secrets.token_urlsafe(32)
+    
     # Buyer Operations
-    # =========================================================================
     
     def create_buyer(self, username: str, password: str) -> int:
         """Create a new buyer account."""
-        with self._lock:
-            if username in self._buyer_usernames:
-                raise ValueError("Username already exists")
-            
-            buyer_id = self._next_buyer_id
-            self._next_buyer_id += 1
-            
-            buyer = Buyer(
-                buyer_id=buyer_id,
-                username=username,
-                password=password
-            )
-            
-            self._buyers[buyer_id] = buyer
-            self._buyer_usernames[username] = buyer_id
-            
-            self._save_data()
-            return buyer_id
-    
-    def get_buyer(self, buyer_id: int) -> Optional[Buyer]:
-        """Get buyer by ID."""
-        with self._lock:
-            return self._buyers.get(buyer_id)
+        conn = self._get_connection()
+        password_hash = self._hash_password(password)
+        
+        cursor = conn.execute("""
+            INSERT INTO buyers (username, password_hash)
+            VALUES (?, ?)
+        """, (username, password_hash))
+        
+        return cursor.lastrowid
     
     def authenticate_buyer(self, username: str, password: str) -> Optional[int]:
         """Authenticate buyer and return buyer_id if successful."""
-        with self._lock:
-            buyer_id = self._buyer_usernames.get(username)
-            if buyer_id is None:
-                return None
-            
-            buyer = self._buyers.get(buyer_id)
-            if buyer and buyer.password == password:
-                return buyer_id
-            return None
+        conn = self._get_connection()
+        password_hash = self._hash_password(password)
+        
+        cursor = conn.execute("""
+            SELECT buyer_id FROM buyers
+            WHERE username = ? AND password_hash = ?
+        """, (username, password_hash))
+        
+        row = cursor.fetchone()
+        return row[0] if row else None
     
     def add_buyer_purchase(self, buyer_id: int, item_id: tuple) -> bool:
         """Record a purchase for a buyer."""
-        with self._lock:
-            buyer = self._buyers.get(buyer_id)
-            if not buyer:
-                return False
+        with self._transaction() as conn:
+            category, unique_id = item_id
             
-            buyer.purchase_history.append(item_id)
-            buyer.items_purchased += 1
-            self._save_data()
+            conn.execute("""
+                INSERT INTO purchase_history (buyer_id, item_category, item_unique_id)
+                VALUES (?, ?, ?)
+            """, (buyer_id, category, unique_id))
+            
+            conn.execute("""
+                UPDATE buyers SET items_purchased = items_purchased + 1
+                WHERE buyer_id = ?
+            """, (buyer_id,))
+            
             return True
     
     def get_buyer_purchases(self, buyer_id: int) -> List[tuple]:
         """Get purchase history for a buyer."""
-        with self._lock:
-            buyer = self._buyers.get(buyer_id)
-            if not buyer:
-                return []
-            return list(buyer.purchase_history)
+        conn = self._get_connection()
+        
+        cursor = conn.execute("""
+            SELECT item_category, item_unique_id FROM purchase_history
+            WHERE buyer_id = ?
+        """, (buyer_id,))
+        
+        return [(row[0], row[1]) for row in cursor.fetchall()]
     
-    # =========================================================================
     # Seller Operations
-    # =========================================================================
     
     def create_seller(self, username: str, password: str) -> int:
         """Create a new seller account."""
-        with self._lock:
-            if username in self._seller_usernames:
-                raise ValueError("Username already exists")
-            
-            seller_id = self._next_seller_id
-            self._next_seller_id += 1
-            
-            seller = Seller(
-                seller_id=seller_id,
-                username=username,
-                password=password
-            )
-            
-            self._sellers[seller_id] = seller
-            self._seller_usernames[username] = seller_id
-            
-            self._save_data()
-            return seller_id
-    
-    def get_seller(self, seller_id: int) -> Optional[Seller]:
-        """Get seller by ID."""
-        with self._lock:
-            return self._sellers.get(seller_id)
+        conn = self._get_connection()
+        password_hash = self._hash_password(password)
+        
+        cursor = conn.execute("""
+            INSERT INTO sellers (username, password_hash)
+            VALUES (?, ?)
+        """, (username, password_hash))
+        
+        return cursor.lastrowid
     
     def authenticate_seller(self, username: str, password: str) -> Optional[int]:
         """Authenticate seller and return seller_id if successful."""
-        with self._lock:
-            seller_id = self._seller_usernames.get(username)
-            if seller_id is None:
-                return None
-            
-            seller = self._sellers.get(seller_id)
-            if seller and seller.password == password:
-                return seller_id
-            return None
+        conn = self._get_connection()
+        password_hash = self._hash_password(password)
+        
+        cursor = conn.execute("""
+            SELECT seller_id FROM sellers
+            WHERE username = ? AND password_hash = ?
+        """, (username, password_hash))
+        
+        row = cursor.fetchone()
+        return row[0] if row else None
     
     def get_seller_rating(self, seller_id: int) -> Optional[tuple]:
         """Get seller feedback (thumbs_up, thumbs_down)."""
-        with self._lock:
-            seller = self._sellers.get(seller_id)
-            if not seller:
-                return None
-            return (seller.thumbs_up, seller.thumbs_down)
+        conn = self._get_connection()
+        
+        cursor = conn.execute("""
+            SELECT thumbs_up, thumbs_down FROM sellers
+            WHERE seller_id = ?
+        """, (seller_id,))
+        
+        row = cursor.fetchone()
+        return (row[0], row[1]) if row else None
     
     def update_seller_feedback(self, seller_id: int, thumbs_up: bool) -> bool:
         """Update seller feedback."""
-        with self._lock:
-            seller = self._sellers.get(seller_id)
-            if not seller:
-                return False
-            
-            if thumbs_up:
-                seller.thumbs_up += 1
-            else:
-                seller.thumbs_down += 1
-            
-            self._save_data()
-            return True
+        conn = self._get_connection()
+        
+        if thumbs_up:
+            cursor = conn.execute("""
+                UPDATE sellers SET thumbs_up = thumbs_up + 1
+                WHERE seller_id = ?
+            """, (seller_id,))
+        else:
+            cursor = conn.execute("""
+                UPDATE sellers SET thumbs_down = thumbs_down + 1
+                WHERE seller_id = ?
+            """, (seller_id,))
+        
+        return cursor.rowcount > 0
     
     def increment_seller_items_sold(self, seller_id: int, count: int = 1) -> bool:
         """Increment items sold counter for seller."""
-        with self._lock:
-            seller = self._sellers.get(seller_id)
-            if not seller:
-                return False
-            seller.items_sold += count
-            self._save_data()
-            return True
+        conn = self._get_connection()
+        
+        cursor = conn.execute("""
+            UPDATE sellers SET items_sold = items_sold + ?
+            WHERE seller_id = ?
+        """, (count, seller_id))
+        
+        return cursor.rowcount > 0
     
-    # =========================================================================
     # Session Operations
-    # =========================================================================
     
     def create_session(self, user_id: int, user_type: str) -> str:
         """Create a new session and return session_id."""
-        with self._lock:
-            session_id = str(uuid.uuid4())
+        with self._transaction() as conn:
+            session_id = self._generate_session_id()
             now = time.time()
             
-            session = Session(
-                session_id=session_id,
-                user_id=user_id,
-                user_type=user_type,
-                created_at=now,
-                last_activity=now
-            )
+            conn.execute("""
+                INSERT INTO sessions (session_id, user_id, user_type, created_at, last_activity)
+                VALUES (?, ?, ?, ?, ?)
+            """, (session_id, user_id, user_type, now, now))
             
-            self._sessions[session_id] = session
-            
-            # Initialize empty cart for this session
-            self._active_carts[session_id] = []
-            
-            # If buyer has a saved cart, load it
+            # If buyer, load saved cart
             if user_type == "buyer":
-                saved_cart = self._saved_carts.get(user_id, [])
-                if saved_cart:
-                    self._active_carts[session_id] = list(saved_cart)
+                conn.execute("""
+                    INSERT OR REPLACE INTO cart_items (session_id, item_category, item_unique_id, quantity)
+                    SELECT ?, item_category, item_unique_id, quantity
+                    FROM saved_carts
+                    WHERE buyer_id = ?
+                """, (session_id, user_id))
             
             return session_id
     
     def validate_session(self, session_id: str, update_activity: bool = False) -> Optional[dict]:
-        """
-        Validate a session and optionally update last activity.
+        """Validate a session and optionally update last activity."""
+        conn = self._get_connection()
         
-        Returns session info dict if valid, None if invalid.
-        """
-        with self._lock:
-            session = self._sessions.get(session_id)
-            if not session:
-                return None
-            
-            if update_activity:
-                session.last_activity = time.time()
-            
-            return {
-                "valid": True,
-                "user_id": session.user_id,
-                "user_type": session.user_type,
-                "created_at": session.created_at,
-                "last_activity": session.last_activity
-            }
+        cursor = conn.execute("""
+            SELECT user_id, user_type, created_at, last_activity
+            FROM sessions WHERE session_id = ?
+        """, (session_id,))
+        
+        row = cursor.fetchone()
+        if not row:
+            return None
+        
+        if update_activity:
+            conn.execute("""
+                UPDATE sessions SET last_activity = ?
+                WHERE session_id = ?
+            """, (time.time(), session_id))
+        
+        return {
+            "valid": True,
+            "user_id": row[0],
+            "user_type": row[1],
+            "created_at": row[2],
+            "last_activity": row[3]
+        }
     
     def end_session(self, session_id: str) -> bool:
         """End a session (logout)."""
-        with self._lock:
-            if session_id in self._sessions:
-                # Remove active cart (unless saved)
-                if session_id in self._active_carts:
-                    del self._active_carts[session_id]
-                
-                del self._sessions[session_id]
-                return True
-            return False
+        with self._transaction() as conn:
+            # Delete cart items
+            conn.execute("DELETE FROM cart_items WHERE session_id = ?", (session_id,))
+            
+            # Delete session
+            cursor = conn.execute("DELETE FROM sessions WHERE session_id = ?", (session_id,))
+            
+            return cursor.rowcount > 0
     
     def cleanup_expired_sessions(self, timeout_seconds: int) -> int:
-        """
-        Remove sessions that have been inactive for longer than timeout.
-        
-        Returns number of sessions removed.
-        """
-        with self._lock:
-            now = time.time()
-            expired = []
+        """Remove expired sessions."""
+        with self._transaction() as conn:
+            cutoff_time = time.time() - timeout_seconds
             
-            for session_id, session in self._sessions.items():
-                if now - session.last_activity > timeout_seconds:
-                    expired.append(session_id)
+            # Get expired session IDs
+            cursor = conn.execute("""
+                SELECT session_id FROM sessions WHERE last_activity < ?
+            """, (cutoff_time,))
             
-            for session_id in expired:
-                if session_id in self._active_carts:
-                    del self._active_carts[session_id]
-                del self._sessions[session_id]
-                logger.info(f"Expired session: {session_id[:8]}...")
+            expired_ids = [row[0] for row in cursor.fetchall()]
             
-            return len(expired)
+            if expired_ids:
+                placeholders = ','.join('?' * len(expired_ids))
+                conn.execute(f"DELETE FROM cart_items WHERE session_id IN ({placeholders})", expired_ids)
+                conn.execute(f"DELETE FROM sessions WHERE session_id IN ({placeholders})", expired_ids)
+            
+            return len(expired_ids)
     
-    # =========================================================================
     # Shopping Cart Operations
-    # =========================================================================
     
     def add_to_cart(self, session_id: str, item_id: tuple, quantity: int) -> bool:
         """Add item to active shopping cart."""
-        with self._lock:
-            if session_id not in self._active_carts:
-                return False
-            
-            cart = self._active_carts[session_id]
-            
-            # Check if item already in cart
-            for cart_item in cart:
-                if tuple(cart_item.item_id) == tuple(item_id):
-                    cart_item.quantity += quantity
-                    return True
-            
-            # Add new item
-            cart.append(CartItem(item_id=item_id, quantity=quantity))
-            return True
+        conn = self._get_connection()
+        category, unique_id = item_id
+        
+        # Try update first
+        cursor = conn.execute("""
+            UPDATE cart_items SET quantity = quantity + ?
+            WHERE session_id = ? AND item_category = ? AND item_unique_id = ?
+        """, (quantity, session_id, category, unique_id))
+        
+        if cursor.rowcount == 0:
+            # Insert new
+            conn.execute("""
+                INSERT INTO cart_items (session_id, item_category, item_unique_id, quantity)
+                VALUES (?, ?, ?, ?)
+            """, (session_id, category, unique_id, quantity))
+        
+        return True
     
     def remove_from_cart(self, session_id: str, item_id: tuple, quantity: int) -> bool:
         """Remove item from active shopping cart."""
-        with self._lock:
-            if session_id not in self._active_carts:
+        with self._transaction() as conn:
+            category, unique_id = item_id
+            
+            cursor = conn.execute("""
+                SELECT quantity FROM cart_items
+                WHERE session_id = ? AND item_category = ? AND item_unique_id = ?
+            """, (session_id, category, unique_id))
+            
+            row = cursor.fetchone()
+            if not row:
                 return False
             
-            cart = self._active_carts[session_id]
+            new_qty = row[0] - quantity
             
-            for i, cart_item in enumerate(cart):
-                if tuple(cart_item.item_id) == tuple(item_id):
-                    cart_item.quantity -= quantity
-                    if cart_item.quantity <= 0:
-                        cart.pop(i)
-                    return True
+            if new_qty <= 0:
+                conn.execute("""
+                    DELETE FROM cart_items
+                    WHERE session_id = ? AND item_category = ? AND item_unique_id = ?
+                """, (session_id, category, unique_id))
+            else:
+                conn.execute("""
+                    UPDATE cart_items SET quantity = ?
+                    WHERE session_id = ? AND item_category = ? AND item_unique_id = ?
+                """, (new_qty, session_id, category, unique_id))
             
-            return False  # Item not in cart
+            return True
     
     def get_cart(self, session_id: str) -> List[dict]:
         """Get contents of active shopping cart."""
-        with self._lock:
-            if session_id not in self._active_carts:
-                return []
-            
-            return [
-                {"item_id": list(item.item_id), "quantity": item.quantity}
-                for item in self._active_carts[session_id]
-            ]
+        conn = self._get_connection()
+        
+        cursor = conn.execute("""
+            SELECT item_category, item_unique_id, quantity FROM cart_items
+            WHERE session_id = ?
+        """, (session_id,))
+        
+        return [
+            {"item_id": [row[0], row[1]], "quantity": row[2]}
+            for row in cursor.fetchall()
+        ]
     
     def save_cart(self, session_id: str, buyer_id: int) -> bool:
         """Save active cart to persist across sessions."""
-        with self._lock:
-            if session_id not in self._active_carts:
-                return False
+        with self._transaction() as conn:
+            # Clear existing saved cart
+            conn.execute("DELETE FROM saved_carts WHERE buyer_id = ?", (buyer_id,))
             
-            # Copy active cart to saved cart
-            self._saved_carts[buyer_id] = list(self._active_carts[session_id])
-            self._save_data()
+            # Copy current cart to saved
+            conn.execute("""
+                INSERT INTO saved_carts (buyer_id, item_category, item_unique_id, quantity)
+                SELECT ?, item_category, item_unique_id, quantity
+                FROM cart_items
+                WHERE session_id = ?
+            """, (buyer_id, session_id))
+            
             return True
     
     def clear_cart(self, session_id: str) -> bool:
         """Clear active shopping cart."""
-        with self._lock:
-            if session_id not in self._active_carts:
-                return False
-            
-            self._active_carts[session_id] = []
-            return True
+        conn = self._get_connection()
+        conn.execute("DELETE FROM cart_items WHERE session_id = ?", (session_id,))
+        return True
     
-    # =========================================================================
-    # Persistence
-    # =========================================================================
-    
-    def _save_data(self) -> None:
-        """Save data to persistence file."""
-        if not self._persistence_file:
-            return
-        
-        try:
-            data = {
-                "buyers": {k: asdict(v) for k, v in self._buyers.items()},
-                "sellers": {k: asdict(v) for k, v in self._sellers.items()},
-                "buyer_usernames": self._buyer_usernames,
-                "seller_usernames": self._seller_usernames,
-                "saved_carts": {
-                    k: [{"item_id": list(i.item_id), "quantity": i.quantity} for i in v]
-                    for k, v in self._saved_carts.items()
-                },
-                "next_buyer_id": self._next_buyer_id,
-                "next_seller_id": self._next_seller_id,
-            }
-            
-            with open(self._persistence_file, 'w') as f:
-                json.dump(data, f, indent=2)
-                
-        except Exception as e:
-            logger.error(f"Failed to save data: {e}")
-    
-    def _load_data(self) -> None:
-        """Load data from persistence file."""
-        try:
-            with open(self._persistence_file, 'r') as f:
-                data = json.load(f)
-            
-            # Restore buyers
-            for buyer_id, buyer_data in data.get("buyers", {}).items():
-                self._buyers[int(buyer_id)] = Buyer(**buyer_data)
-            
-            # Restore sellers
-            for seller_id, seller_data in data.get("sellers", {}).items():
-                self._sellers[int(seller_id)] = Seller(**seller_data)
-            
-            # Restore username mappings
-            self._buyer_usernames = data.get("buyer_usernames", {})
-            self._seller_usernames = data.get("seller_usernames", {})
-            
-            # Restore saved carts
-            for buyer_id, cart_data in data.get("saved_carts", {}).items():
-                self._saved_carts[int(buyer_id)] = [
-                    CartItem(item_id=tuple(item["item_id"]), quantity=item["quantity"])
-                    for item in cart_data
-                ]
-            
-            # Restore counters
-            self._next_buyer_id = data.get("next_buyer_id", 1)
-            self._next_seller_id = data.get("next_seller_id", 1)
-            
-            logger.info(f"Loaded {len(self._buyers)} buyers, {len(self._sellers)} sellers")
-            
-        except Exception as e:
-            logger.error(f"Failed to load data: {e}")
+    def close(self):
+        """Close database connections."""
+        if hasattr(self.local, 'connection'):
+            self.local.connection.close()
 
-
-# =============================================================================
-# Database Server
-# =============================================================================
 
 class CustomerDBServer:
-    """
-    TCP server for the Customer Database.
-    
-    Handles requests from frontend servers (Buyer Server, Seller Server).
-    """
+    """Optimized TCP server for the Customer Database."""
     
     HEADER_SIZE = 4
-    RECV_BUFFER = 4096
+    RECV_BUFFER = 8192  # Larger buffer
     
     def __init__(self, host: str = "0.0.0.0", port: int = 5003,
-                 persistence_file: Optional[str] = None):
-        """
-        Initialize the database server.
-        
-        Args:
-            host: Host to bind to
-            port: Port to listen on
-            persistence_file: Optional file for data persistence
-        """
+                 db_path: str = "customer.db"):
         self.host = host
         self.port = port
         self._socket: Optional[socket.socket] = None
         self._running = False
         
         # Initialize storage
-        self._storage = CustomerStorage(persistence_file)
+        self._storage = CustomerStorage(db_path)
         
         # Operation handlers
         self._handlers: Dict[str, Callable] = {
@@ -529,8 +508,9 @@ class CustomerDBServer:
         """Start the database server."""
         self._socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self._socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        self._socket.setsockopt(socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1)
         self._socket.bind((self.host, self.port))
-        self._socket.listen(50)
+        self._socket.listen(100)  # Larger backlog
         
         self._running = True
         logger.info(f"Customer DB server started on {self.host}:{self.port}")
@@ -539,7 +519,6 @@ class CustomerDBServer:
             while self._running:
                 try:
                     client_socket, address = self._socket.accept()
-                    logger.debug(f"Connection from {address}")
                     
                     # Handle in separate thread
                     thread = threading.Thread(
@@ -549,8 +528,6 @@ class CustomerDBServer:
                     )
                     thread.start()
                     
-                except socket.timeout:
-                    continue
                 except OSError:
                     if self._running:
                         raise
@@ -562,28 +539,29 @@ class CustomerDBServer:
         self._running = False
         if self._socket:
             self._socket.close()
+        self._storage.close()
         logger.info("Customer DB server stopped")
     
     def _handle_client(self, client_socket: socket.socket, address: tuple) -> None:
-        """Handle a client connection."""
-        client_socket.settimeout(30.0)
+        """Handle a client connection with optimized timeouts."""
+        client_socket.settimeout(5.0)  # 5 second timeout
         
         try:
-            while self._running:
-                try:
-                    request = self._receive_message(client_socket)
-                    if request is None:
-                        break
-                    
-                    response = self._process_request(request)
-                    self._send_message(client_socket, response)
-                    
-                except socket.timeout:
-                    continue
-                except Exception as e:
-                    logger.error(f"Error handling request: {e}")
-                    break
+            # Single request per connection for simplicity
+            request = self._receive_message(client_socket)
+            if request:
+                response = self._process_request(request)
+                self._send_message(client_socket, response)
+        
+        except socket.timeout:
+            logger.warning(f"Client timeout: {address}")
+        except Exception as e:
+            logger.error(f"Error handling client {address}: {e}")
         finally:
+            try:
+                client_socket.shutdown(socket.SHUT_RDWR)
+            except:
+                pass
             client_socket.close()
     
     def _receive_message(self, sock: socket.socket) -> Optional[dict]:
@@ -594,13 +572,20 @@ class CustomerDBServer:
                 return None
             
             message_length = struct.unpack('!I', header_data)[0]
+            
+            # Sanity check
+            if message_length > 1024 * 1024:  # 1MB max
+                logger.error(f"Message too large: {message_length}")
+                return None
+            
             message_data = self._recv_exact(sock, message_length)
             
             if not message_data:
                 return None
             
             return json.loads(message_data.decode('utf-8'))
-        except (json.JSONDecodeError, struct.error):
+        except (json.JSONDecodeError, struct.error) as e:
+            logger.error(f"Message decode error: {e}")
             return None
     
     def _recv_exact(self, sock: socket.socket, num_bytes: int) -> Optional[bytes]:
@@ -634,7 +619,7 @@ class CustomerDBServer:
         try:
             return handler(request.get("data", {}))
         except Exception as e:
-            logger.error(f"Error in {operation}: {e}")
+            logger.error(f"Error in {operation}: {e}", exc_info=True)
             return {"status": "error", "error_message": str(e)}
     
     def _success(self, data: dict) -> dict:
@@ -643,38 +628,27 @@ class CustomerDBServer:
     def _error(self, message: str) -> dict:
         return {"status": "error", "error_message": message}
     
-    # =========================================================================
     # Request Handlers
-    # =========================================================================
     
     def _handle_ping(self, data: dict) -> dict:
         return self._success({"message": "pong", "timestamp": time.time()})
     
     def _handle_create_buyer(self, data: dict) -> dict:
         try:
-            buyer_id = self._storage.create_buyer(
-                data["username"],
-                data["password"]
-            )
+            buyer_id = self._storage.create_buyer(data["username"], data["password"])
             return self._success({"buyer_id": buyer_id})
-        except ValueError as e:
-            return self._error(str(e))
+        except sqlite3.IntegrityError:
+            return self._error("Username already exists")
     
     def _handle_create_seller(self, data: dict) -> dict:
         try:
-            seller_id = self._storage.create_seller(
-                data["username"],
-                data["password"]
-            )
+            seller_id = self._storage.create_seller(data["username"], data["password"])
             return self._success({"seller_id": seller_id})
-        except ValueError as e:
-            return self._error(str(e))
+        except sqlite3.IntegrityError:
+            return self._error("Username already exists")
     
     def _handle_login_buyer(self, data: dict) -> dict:
-        buyer_id = self._storage.authenticate_buyer(
-            data["username"],
-            data["password"]
-        )
+        buyer_id = self._storage.authenticate_buyer(data["username"], data["password"])
         
         if buyer_id is None:
             return self._error("Invalid username or password")
@@ -683,10 +657,7 @@ class CustomerDBServer:
         return self._success({"session_id": session_id, "buyer_id": buyer_id})
     
     def _handle_login_seller(self, data: dict) -> dict:
-        seller_id = self._storage.authenticate_seller(
-            data["username"],
-            data["password"]
-        )
+        seller_id = self._storage.authenticate_seller(data["username"], data["password"])
         
         if seller_id is None:
             return self._error("Invalid username or password")
@@ -719,10 +690,7 @@ class CustomerDBServer:
         return self._success({"thumbs_up": rating[0], "thumbs_down": rating[1]})
     
     def _handle_update_seller_feedback(self, data: dict) -> dict:
-        success = self._storage.update_seller_feedback(
-            data["seller_id"],
-            data["thumbs_up"]
-        )
+        success = self._storage.update_seller_feedback(data["seller_id"], data["thumbs_up"])
         if success:
             return self._success({"updated": True})
         return self._error("Seller not found")
@@ -775,14 +743,14 @@ def main():
     parser = argparse.ArgumentParser(description="Customer Database Server")
     parser.add_argument("--host", default="0.0.0.0", help="Host to bind to")
     parser.add_argument("--port", type=int, default=5003, help="Port to listen on")
-    parser.add_argument("--data-file", default=None, help="File for data persistence")
+    parser.add_argument("--db-path", default="customer.db", help="SQLite database file path")
     
     args = parser.parse_args()
     
     server = CustomerDBServer(
         host=args.host,
         port=args.port,
-        persistence_file=args.data_file
+        db_path=args.db_path
     )
     
     try:

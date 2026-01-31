@@ -204,12 +204,12 @@ python3 database/product_db.py
 
 5. **On VM3** (Buyer Frontend):
 ```bash
-python3 frontend/buyer_server.py
+python3 server/buyer_server.py
 ```
 
 6. **On VM4** (Seller Frontend):
 ```bash
-python3 frontend/seller_server.py
+python3 server/seller_server.py
 ```
 
 7. **On VM5** (Clients):

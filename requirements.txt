@@ -1,2 +1,0 @@
-# No external dependencies required for core functionality
-# Using only Python standard library for socket-based TCP/IP

@@ -4,7 +4,7 @@
 
 ### Architecture Overview
 
-You can find the performance test results here: [architecture_diagram.png]("architecture_diagram.png")
+You can find the architecture diagram here: [architecture_diagram.png]("architecture_diagram.png")
 
 The system consists of six main components:
 

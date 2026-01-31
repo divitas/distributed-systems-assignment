@@ -4,7 +4,7 @@
 
 ### Architecture Overview
 
-You can find the architecture diagram here: [architecture_diagram.png]("architecture_diagram.png")
+You can find the architecture diagram here: [architecture_diagram.png]('architecture_diagram.png')
 
 The system consists of six main components:
 
@@ -254,7 +254,7 @@ Each client performs approximately 1000 operations total across all runs.
 
 ## Performance Report and Analysis
 
-You can find the performance test results here: [performance_test.log]("tests/logs/performance_test_20260130_191442.log")
+You can find the performance test results here: [performance_test.log](`tests/logs/performance_test_20260130_191442.log`)
 
 ### Analysis
 

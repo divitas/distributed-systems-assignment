@@ -147,6 +147,10 @@ class CustomerDatabase:
                 return self._save_cart(data)
             elif operation == OP_UPDATE_SESSION_ACTIVITY:
                 return self._update_session_activity(data)
+            elif operation == OP_RESTORE_SESSION_BUYER: #JN added
+                return self._restore_session_buyer(data)
+            elif operation == OP_RESTORE_SESSION_SELLER: #JN added
+                return self._restore_session_seller(data)
             else:
                 return Protocol.create_response(STATUS_ERROR, message=f"Unknown operation: {operation}")
         except Exception as e:
@@ -284,6 +288,115 @@ class CustomerDatabase:
                 return Protocol.create_response(
                     STATUS_SUCCESS,
                     data={'seller_id': seller_id}
+                )
+            else:
+                return Protocol.create_response(
+                    STATUS_UNAUTHORIZED,
+                    message="Invalid session. Please login."
+                )
+        finally:
+            conn.close()
+
+    def _restore_buyer_session(self, data): #JN added
+        """Restore buyer session if still valid"""
+        session_id = data.get('session_id')
+        
+        conn = self._get_connection()
+        cursor = conn.cursor()
+        
+        try:
+            cursor.execute('''
+                SELECT bs.buyer_id, bs.last_activity, b.buyer_name
+                FROM buyer_sessions bs
+                JOIN buyers b ON bs.buyer_id = b.buyer_id
+                WHERE bs.session_id = ?
+            ''', (session_id,))
+            
+            result = cursor.fetchone()
+            
+            if result:
+                buyer_id, last_activity, buyer_name = result
+                
+                # Check if session expired
+                if is_session_expired(last_activity, config.SESSION_TIMEOUT):
+                    cursor.execute('DELETE FROM shopping_carts WHERE session_id = ?', (session_id,))
+                    cursor.execute('DELETE FROM buyer_sessions WHERE session_id = ?', (session_id,))
+                    conn.commit()
+                    return Protocol.create_response(
+                        STATUS_UNAUTHORIZED,
+                        message="Session expired. Please login again."
+                    )
+                
+                # Update last activity (refresh session)
+                current_time = get_current_timestamp()
+                cursor.execute('''
+                    UPDATE buyer_sessions SET last_activity = ?
+                    WHERE session_id = ?
+                ''', (current_time, session_id))
+                conn.commit()
+                
+                return Protocol.create_response(
+                    STATUS_SUCCESS,
+                    data={
+                        'session_id': session_id,
+                        'buyer_id': buyer_id,
+                        'buyer_name': buyer_name
+                    },
+                    message="Session restored successfully"
+                )
+            else:
+                return Protocol.create_response(
+                    STATUS_UNAUTHORIZED,
+                    message="Invalid session. Please login."
+                )
+        finally:
+            conn.close()
+
+    def _restore_seller_session(self, data): #JN added
+        """Restore seller session if still valid"""
+        session_id = data.get('session_id')
+        
+        conn = self._get_connection()
+        cursor = conn.cursor()
+        
+        try:
+            cursor.execute('''
+                SELECT ss.seller_id, ss.last_activity, s.seller_name
+                FROM seller_sessions ss
+                JOIN sellers s ON ss.seller_id = s.seller_id
+                WHERE ss.session_id = ?
+            ''', (session_id,))
+            
+            result = cursor.fetchone()
+            
+            if result:
+                seller_id, last_activity, seller_name = result
+                
+                # Check if session expired
+                if is_session_expired(last_activity, config.SESSION_TIMEOUT):
+                    cursor.execute('DELETE FROM seller_sessions WHERE session_id = ?', (session_id,))
+                    conn.commit()
+                    return Protocol.create_response(
+                        STATUS_UNAUTHORIZED,
+                        message="Session expired. Please login again."
+                    )
+                
+                # Update last activity (refresh session)
+                current_time = get_current_timestamp()
+                cursor.execute('''
+                    UPDATE seller_sessions SET last_activity = ?
+                    WHERE session_id = ?
+                ''', (current_time, session_id))
+                conn.commit()
+                
+                return Protocol.create_response(
+                    STATUS_SUCCESS,
+                    data={
+                        'session_id': session_id,
+                        'seller_id': seller_id,
+                        'seller_name': seller_name
+                    },
+                    message="Session restored successfully"
                 )
             else:
                 return Protocol.create_response(

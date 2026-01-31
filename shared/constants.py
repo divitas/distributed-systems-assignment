@@ -68,6 +68,10 @@ OP_GET_ITEM_FEEDBACK = "GET_ITEM_FEEDBACK"
 OP_CHECK_ITEM_AVAILABILITY = "CHECK_ITEM_AVAILABILITY"
 OP_DECREASE_ITEM_QUANTITY = "DECREASE_ITEM_QUANTITY"
 
+# Session Operations (JN added)
+OP_RESTORE_SESSION_BUYER = 'restore_session_buyer'
+OP_RESTORE_SESSION_SELLER = 'restore_session_seller'
+
 # ============================================================================
 # API OPERATION CODES - Frontend (Client-facing)
 # ============================================================================
@@ -80,6 +84,7 @@ API_SELLER_REGISTER_ITEM = "SELLER_REGISTER_ITEM"
 API_SELLER_CHANGE_PRICE = "SELLER_CHANGE_PRICE"
 API_SELLER_UPDATE_UNITS = "SELLER_UPDATE_UNITS"
 API_SELLER_DISPLAY_ITEMS = "SELLER_DISPLAY_ITEMS"
+API_SELLER_RESTORE_SESSION = 'seller_restore_session' #JN added
 
 # Buyer Frontend APIs
 API_BUYER_CREATE_ACCOUNT = "BUYER_CREATE_ACCOUNT"
@@ -95,6 +100,7 @@ API_BUYER_DISPLAY_CART = "BUYER_DISPLAY_CART"
 API_BUYER_PROVIDE_FEEDBACK = "BUYER_PROVIDE_FEEDBACK"
 API_BUYER_GET_SELLER_RATING = "BUYER_GET_SELLER_RATING"
 API_BUYER_GET_PURCHASES = "BUYER_GET_PURCHASES"
+API_BUYER_RESTORE_SESSION = 'buyer_restore_session' #JN added
 
 # ============================================================================
 # MESSAGE FORMAT DELIMITERS

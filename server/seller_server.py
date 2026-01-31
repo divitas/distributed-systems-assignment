@@ -65,6 +65,26 @@ class SellerFrontend:
             request
         )
         return response
+
+    def _restore_session(self, session_id):
+        """Restore an existing session using session_id"""
+        if not session_id:
+            return Protocol.create_response(
+                STATUS_INVALID_REQUEST,
+                message="Session ID is required"
+            )
+        
+        # Forward to customer DB
+        request = Protocol.create_request(
+            OP_RESTORE_SESSION_SELLER,
+            data={'session_id': session_id}
+        )
+        
+        return self._db_request(
+            self.customer_db_host,
+            self.customer_db_port,
+            request
+        )
     
     def handle_request(self, request):
         """Handle incoming client request"""
@@ -79,6 +99,8 @@ class SellerFrontend:
                 return self._login(data)
             elif operation == API_SELLER_LOGOUT:
                 return self._logout(session_id)
+            elif operation == API_SELLER_RESTORE_SESSION: #JN added
+                return self._restore_session(session_id)
             
             # All operations below require valid session
             session_validation = self._validate_session(session_id)

@@ -1,0 +1,286 @@
+2026-01-30 19:14:42,674 - INFO - 
+======================================================================
+2026-01-30 19:14:42,675 - INFO - ONLINE MARKETPLACE PERFORMANCE TESTING
+2026-01-30 19:14:42,675 - INFO - Started at: 2026-01-30 19:14:42
+2026-01-30 19:14:42,675 - INFO - Log file: /Users/jana7431/Downloads/DS_PA_V2/distributed-systems-assignment/tests/logs/performance_test_20260130_191442.log
+2026-01-30 19:14:42,676 - INFO - ======================================================================
+2026-01-30 19:14:42,676 - INFO - 
+Waiting for servers to be ready...
+2026-01-30 19:14:44,678 - INFO - 
+======================================================================
+2026-01-30 19:14:44,678 - INFO - SCENARIO 1: Light Load (1 Seller, 1 Buyer)
+2026-01-30 19:14:44,678 - INFO - ======================================================================
+2026-01-30 19:14:44,678 - INFO - 
+======================================================================
+2026-01-30 19:14:44,678 - INFO - SCENARIO: 1 Sellers, 1 Buyers
+2026-01-30 19:14:44,678 - INFO - Operations per client: 100
+2026-01-30 19:14:44,678 - INFO - Number of runs: 10
+2026-01-30 19:14:44,678 - INFO - ======================================================================
+2026-01-30 19:14:44,678 - INFO - 
+Run 1/10...
+2026-01-30 19:15:02,383 - INFO -   Completed in 17.70s
+2026-01-30 19:15:02,384 - INFO -   Operations: 907, Errors: 0
+2026-01-30 19:15:02,384 - INFO -   Avg Response Time: 34.48ms
+2026-01-30 19:15:02,384 - INFO -   Throughput: 51.24 ops/sec
+2026-01-30 19:15:02,384 - INFO - 
+Run 2/10...
+2026-01-30 19:15:19,553 - INFO -   Completed in 17.16s
+2026-01-30 19:15:19,554 - INFO -   Operations: 907, Errors: 0
+2026-01-30 19:15:19,554 - INFO -   Avg Response Time: 33.16ms
+2026-01-30 19:15:19,554 - INFO -   Throughput: 52.84 ops/sec
+2026-01-30 19:15:19,554 - INFO - 
+Run 3/10...
+2026-01-30 19:15:36,706 - INFO -   Completed in 17.15s
+2026-01-30 19:15:36,706 - INFO -   Operations: 907, Errors: 0
+2026-01-30 19:15:36,707 - INFO -   Avg Response Time: 33.58ms
+2026-01-30 19:15:36,707 - INFO -   Throughput: 52.89 ops/sec
+2026-01-30 19:15:36,707 - INFO - 
+Run 4/10...
+2026-01-30 19:15:54,611 - INFO -   Completed in 17.90s
+2026-01-30 19:15:54,612 - INFO -   Operations: 907, Errors: 0
+2026-01-30 19:15:54,612 - INFO -   Avg Response Time: 34.77ms
+2026-01-30 19:15:54,612 - INFO -   Throughput: 50.66 ops/sec
+2026-01-30 19:15:54,612 - INFO - 
+Run 5/10...
+2026-01-30 19:16:12,641 - INFO -   Completed in 18.03s
+2026-01-30 19:16:12,642 - INFO -   Operations: 907, Errors: 0
+2026-01-30 19:16:12,642 - INFO -   Avg Response Time: 35.77ms
+2026-01-30 19:16:12,642 - INFO -   Throughput: 50.32 ops/sec
+2026-01-30 19:16:12,642 - INFO - 
+Run 6/10...
+2026-01-30 19:16:30,442 - INFO -   Completed in 17.80s
+2026-01-30 19:16:30,443 - INFO -   Operations: 907, Errors: 0
+2026-01-30 19:16:30,443 - INFO -   Avg Response Time: 35.33ms
+2026-01-30 19:16:30,443 - INFO -   Throughput: 50.96 ops/sec
+2026-01-30 19:16:30,443 - INFO - 
+Run 7/10...
+2026-01-30 19:16:48,297 - INFO -   Completed in 17.85s
+2026-01-30 19:16:48,297 - INFO -   Operations: 907, Errors: 0
+2026-01-30 19:16:48,297 - INFO -   Avg Response Time: 35.51ms
+2026-01-30 19:16:48,298 - INFO -   Throughput: 50.81 ops/sec
+2026-01-30 19:16:48,298 - INFO - 
+Run 8/10...
+2026-01-30 19:17:07,321 - INFO -   Completed in 19.02s
+2026-01-30 19:17:07,322 - INFO -   Operations: 907, Errors: 0
+2026-01-30 19:17:07,323 - INFO -   Avg Response Time: 37.94ms
+2026-01-30 19:17:07,323 - INFO -   Throughput: 47.68 ops/sec
+2026-01-30 19:17:07,323 - INFO - 
+Run 9/10...
+2026-01-30 19:17:25,163 - INFO -   Completed in 17.84s
+2026-01-30 19:17:25,164 - INFO -   Operations: 907, Errors: 0
+2026-01-30 19:17:25,164 - INFO -   Avg Response Time: 35.63ms
+2026-01-30 19:17:25,164 - INFO -   Throughput: 50.85 ops/sec
+2026-01-30 19:17:25,164 - INFO - 
+Run 10/10...
+2026-01-30 19:17:42,710 - INFO -   Completed in 17.54s
+2026-01-30 19:17:42,711 - INFO -   Operations: 907, Errors: 0
+2026-01-30 19:17:42,711 - INFO -   Avg Response Time: 34.85ms
+2026-01-30 19:17:42,711 - INFO -   Throughput: 51.70 ops/sec
+2026-01-30 19:17:42,711 - INFO - 
+======================================================================
+2026-01-30 19:17:42,711 - INFO - AGGREGATE RESULTS (10 runs)
+2026-01-30 19:17:42,711 - INFO - ======================================================================
+2026-01-30 19:17:42,711 - INFO - Average Response Time:
+2026-01-30 19:17:42,712 - INFO -   Mean:   35.10ms
+2026-01-30 19:17:42,712 - INFO -   Median: 35.09ms
+2026-01-30 19:17:42,712 - INFO -   StdDev: 1.32ms
+2026-01-30 19:17:42,712 - INFO - 
+Average Throughput:
+2026-01-30 19:17:42,712 - INFO -   Mean:   50.99 ops/sec
+2026-01-30 19:17:42,712 - INFO -   Median: 50.90 ops/sec
+2026-01-30 19:17:42,712 - INFO -   StdDev: 1.46 ops/sec
+2026-01-30 19:17:42,712 - INFO - 
+Total Operations: 9070
+2026-01-30 19:17:42,712 - INFO - Total Errors: 0
+2026-01-30 19:17:42,713 - INFO - Error Rate: 0.00%
+2026-01-30 19:17:42,713 - INFO - 
+======================================================================
+2026-01-30 19:17:42,713 - INFO - SCENARIO 2: Medium Load (10 Sellers, 10 Buyers)
+2026-01-30 19:17:42,713 - INFO - ======================================================================
+2026-01-30 19:17:42,713 - INFO - 
+======================================================================
+2026-01-30 19:17:42,714 - INFO - SCENARIO: 10 Sellers, 10 Buyers
+2026-01-30 19:17:42,714 - INFO - Operations per client: 50
+2026-01-30 19:17:42,714 - INFO - Number of runs: 10
+2026-01-30 19:17:42,714 - INFO - ======================================================================
+2026-01-30 19:17:42,714 - INFO - 
+Run 1/10...
+2026-01-30 19:18:14,429 - INFO -   Completed in 31.71s
+2026-01-30 19:18:14,430 - INFO -   Operations: 4570, Errors: 0
+2026-01-30 19:18:14,430 - INFO -   Avg Response Time: 111.32ms
+2026-01-30 19:18:14,430 - INFO -   Throughput: 144.13 ops/sec
+2026-01-30 19:18:14,430 - INFO - 
+Run 2/10...
+2026-01-30 19:18:46,303 - INFO -   Completed in 31.87s
+2026-01-30 19:18:46,303 - INFO -   Operations: 4570, Errors: 0
+2026-01-30 19:18:46,304 - INFO -   Avg Response Time: 119.74ms
+2026-01-30 19:18:46,304 - INFO -   Throughput: 143.40 ops/sec
+2026-01-30 19:18:46,304 - INFO - 
+Run 3/10...
+2026-01-30 19:19:18,849 - INFO -   Completed in 32.54s
+2026-01-30 19:19:18,851 - INFO -   Operations: 4570, Errors: 0
+2026-01-30 19:19:18,851 - INFO -   Avg Response Time: 120.67ms
+2026-01-30 19:19:18,851 - INFO -   Throughput: 140.45 ops/sec
+2026-01-30 19:19:18,851 - INFO - 
+Run 4/10...
+2026-01-30 19:19:51,722 - INFO -   Completed in 32.86s
+2026-01-30 19:19:51,723 - INFO -   Operations: 4570, Errors: 0
+2026-01-30 19:19:51,723 - INFO -   Avg Response Time: 124.41ms
+2026-01-30 19:19:51,723 - INFO -   Throughput: 139.06 ops/sec
+2026-01-30 19:19:51,724 - INFO - 
+Run 5/10...
+2026-01-30 19:20:22,506 - INFO -   Completed in 30.77s
+2026-01-30 19:20:22,507 - INFO -   Operations: 4570, Errors: 0
+2026-01-30 19:20:22,507 - INFO -   Avg Response Time: 116.08ms
+2026-01-30 19:20:22,507 - INFO -   Throughput: 148.54 ops/sec
+2026-01-30 19:20:22,507 - INFO - 
+Run 6/10...
+2026-01-30 19:20:52,880 - INFO -   Completed in 30.36s
+2026-01-30 19:20:52,881 - INFO -   Operations: 4570, Errors: 0
+2026-01-30 19:20:52,882 - INFO -   Avg Response Time: 113.61ms
+2026-01-30 19:20:52,882 - INFO -   Throughput: 150.50 ops/sec
+2026-01-30 19:20:52,882 - INFO - 
+Run 7/10...
+2026-01-30 19:21:22,813 - INFO -   Completed in 29.92s
+2026-01-30 19:21:22,814 - INFO -   Operations: 4570, Errors: 0
+2026-01-30 19:21:22,814 - INFO -   Avg Response Time: 112.47ms
+2026-01-30 19:21:22,814 - INFO -   Throughput: 152.73 ops/sec
+2026-01-30 19:21:22,814 - INFO - 
+Run 8/10...
+2026-01-30 19:21:52,948 - INFO -   Completed in 30.13s
+2026-01-30 19:21:52,949 - INFO -   Operations: 4570, Errors: 0
+2026-01-30 19:21:52,949 - INFO -   Avg Response Time: 115.16ms
+2026-01-30 19:21:52,949 - INFO -   Throughput: 151.70 ops/sec
+2026-01-30 19:21:52,949 - INFO - 
+Run 9/10...
+2026-01-30 19:22:24,210 - INFO -   Completed in 31.25s
+2026-01-30 19:22:24,210 - INFO -   Operations: 4570, Errors: 0
+2026-01-30 19:22:24,211 - INFO -   Avg Response Time: 116.97ms
+2026-01-30 19:22:24,211 - INFO -   Throughput: 146.23 ops/sec
+2026-01-30 19:22:24,211 - INFO - 
+Run 10/10...
+2026-01-30 19:22:57,491 - INFO -   Completed in 33.27s
+2026-01-30 19:22:57,491 - INFO -   Operations: 4570, Errors: 0
+2026-01-30 19:22:57,491 - INFO -   Avg Response Time: 126.02ms
+2026-01-30 19:22:57,491 - INFO -   Throughput: 137.35 ops/sec
+2026-01-30 19:22:57,491 - INFO - 
+======================================================================
+2026-01-30 19:22:57,492 - INFO - AGGREGATE RESULTS (10 runs)
+2026-01-30 19:22:57,492 - INFO - ======================================================================
+2026-01-30 19:22:57,492 - INFO - Average Response Time:
+2026-01-30 19:22:57,492 - INFO -   Mean:   117.65ms
+2026-01-30 19:22:57,492 - INFO -   Median: 116.53ms
+2026-01-30 19:22:57,492 - INFO -   StdDev: 4.96ms
+2026-01-30 19:22:57,492 - INFO - 
+Average Throughput:
+2026-01-30 19:22:57,492 - INFO -   Mean:   145.41 ops/sec
+2026-01-30 19:22:57,493 - INFO -   Median: 145.18 ops/sec
+2026-01-30 19:22:57,493 - INFO -   StdDev: 5.43 ops/sec
+2026-01-30 19:22:57,493 - INFO - 
+Total Operations: 45700
+2026-01-30 19:22:57,493 - INFO - Total Errors: 0
+2026-01-30 19:22:57,494 - INFO - Error Rate: 0.00%
+2026-01-30 19:22:57,494 - INFO - 
+======================================================================
+2026-01-30 19:22:57,495 - INFO - SCENARIO 3: Heavy Load (100 Sellers, 100 Buyers)
+2026-01-30 19:22:57,495 - INFO - ======================================================================
+2026-01-30 19:22:57,495 - INFO - 
+======================================================================
+2026-01-30 19:22:57,495 - INFO - SCENARIO: 100 Sellers, 100 Buyers
+2026-01-30 19:22:57,495 - INFO - Operations per client: 5
+2026-01-30 19:22:57,495 - INFO - Number of runs: 10
+2026-01-30 19:22:57,495 - INFO - ======================================================================
+2026-01-30 19:22:57,495 - INFO - 
+Run 1/10...
+2026-01-30 19:23:27,057 - INFO -   Completed in 29.55s
+2026-01-30 19:23:27,057 - INFO -   Operations: 4686, Errors: 65
+2026-01-30 19:23:27,057 - INFO -   Avg Response Time: 858.88ms
+2026-01-30 19:23:27,057 - INFO -   Throughput: 158.56 ops/sec
+2026-01-30 19:23:27,057 - INFO - 
+Run 2/10...
+2026-01-30 19:23:56,662 - INFO -   Completed in 29.60s
+2026-01-30 19:23:56,662 - INFO -   Operations: 4629, Errors: 73
+2026-01-30 19:23:56,663 - INFO -   Avg Response Time: 856.39ms
+2026-01-30 19:23:56,663 - INFO -   Throughput: 156.41 ops/sec
+2026-01-30 19:23:56,663 - INFO - 
+Run 3/10...
+2026-01-30 19:24:23,916 - INFO -   Completed in 27.25s
+2026-01-30 19:24:23,917 - INFO -   Operations: 4295, Errors: 87
+2026-01-30 19:24:23,917 - INFO -   Avg Response Time: 799.23ms
+2026-01-30 19:24:23,917 - INFO -   Throughput: 157.64 ops/sec
+2026-01-30 19:24:23,917 - INFO - 
+Run 4/10...
+2026-01-30 19:24:51,105 - INFO -   Completed in 27.18s
+2026-01-30 19:24:51,105 - INFO -   Operations: 4310, Errors: 77
+2026-01-30 19:24:51,105 - INFO -   Avg Response Time: 811.43ms
+2026-01-30 19:24:51,105 - INFO -   Throughput: 158.55 ops/sec
+2026-01-30 19:24:51,105 - INFO - 
+Run 5/10...
+2026-01-30 19:25:18,867 - INFO -   Completed in 27.75s
+2026-01-30 19:25:18,867 - INFO -   Operations: 4331, Errors: 76
+2026-01-30 19:25:18,867 - INFO -   Avg Response Time: 833.20ms
+2026-01-30 19:25:18,867 - INFO -   Throughput: 156.05 ops/sec
+2026-01-30 19:25:18,869 - INFO - 
+Run 6/10...
+2026-01-30 19:25:47,943 - INFO -   Completed in 29.06s
+2026-01-30 19:25:47,944 - INFO -   Operations: 4652, Errors: 92
+2026-01-30 19:25:47,944 - INFO -   Avg Response Time: 853.18ms
+2026-01-30 19:25:47,944 - INFO -   Throughput: 160.06 ops/sec
+2026-01-30 19:25:47,944 - INFO - 
+Run 7/10...
+2026-01-30 19:26:16,417 - INFO -   Completed in 28.46s
+2026-01-30 19:26:16,417 - INFO -   Operations: 4514, Errors: 73
+2026-01-30 19:26:16,417 - INFO -   Avg Response Time: 823.60ms
+2026-01-30 19:26:16,417 - INFO -   Throughput: 158.58 ops/sec
+2026-01-30 19:26:16,417 - INFO - 
+Run 8/10...
+2026-01-30 19:26:44,519 - INFO -   Completed in 28.09s
+2026-01-30 19:26:44,520 - INFO -   Operations: 4527, Errors: 72
+2026-01-30 19:26:44,521 - INFO -   Avg Response Time: 843.92ms
+2026-01-30 19:26:44,521 - INFO -   Throughput: 161.14 ops/sec
+2026-01-30 19:26:44,521 - INFO - 
+Run 9/10...
+2026-01-30 19:27:17,609 - INFO -   Completed in 33.08s
+2026-01-30 19:27:17,610 - INFO -   Operations: 4262, Errors: 111
+2026-01-30 19:27:17,610 - INFO -   Avg Response Time: 983.21ms
+2026-01-30 19:27:17,611 - INFO -   Throughput: 128.85 ops/sec
+2026-01-30 19:27:17,611 - INFO - 
+Run 10/10...
+2026-01-30 19:27:51,366 - INFO -   Completed in 33.75s
+2026-01-30 19:27:51,366 - INFO -   Operations: 4449, Errors: 129
+2026-01-30 19:27:51,366 - INFO -   Avg Response Time: 986.58ms
+2026-01-30 19:27:51,366 - INFO -   Throughput: 131.83 ops/sec
+2026-01-30 19:27:51,366 - INFO - 
+======================================================================
+2026-01-30 19:27:51,366 - INFO - AGGREGATE RESULTS (10 runs)
+2026-01-30 19:27:51,366 - INFO - ======================================================================
+2026-01-30 19:27:51,367 - INFO - Average Response Time:
+2026-01-30 19:27:51,367 - INFO -   Mean:   864.96ms
+2026-01-30 19:27:51,367 - INFO -   Median: 848.55ms
+2026-01-30 19:27:51,367 - INFO -   StdDev: 66.14ms
+2026-01-30 19:27:51,367 - INFO - 
+Average Throughput:
+2026-01-30 19:27:51,367 - INFO -   Mean:   152.77 ops/sec
+2026-01-30 19:27:51,367 - INFO -   Median: 158.10 ops/sec
+2026-01-30 19:27:51,367 - INFO -   StdDev: 11.94 ops/sec
+2026-01-30 19:27:51,367 - INFO - 
+Total Operations: 44655
+2026-01-30 19:27:51,367 - INFO - Total Errors: 855
+2026-01-30 19:27:51,367 - INFO - Error Rate: 1.91%
+2026-01-30 19:27:51,368 - INFO - 
+======================================================================
+2026-01-30 19:27:51,368 - INFO - PERFORMANCE SUMMARY
+2026-01-30 19:27:51,368 - INFO - ======================================================================
+2026-01-30 19:27:51,369 - INFO - 
+Scenario                  Avg RT (ms)     Avg Throughput (ops/s)   
+2026-01-30 19:27:51,369 - INFO - ----------------------------------------------------------------------
+2026-01-30 19:27:51,369 - INFO - Scenario 1 (1S+1B)        35.10           50.99                    
+2026-01-30 19:27:51,370 - INFO - Scenario 2 (10S+10B)      117.65          145.41                   
+2026-01-30 19:27:51,370 - INFO - Scenario 3 (100S+100B)    864.96          152.77                   
+2026-01-30 19:27:51,374 - INFO - 
+======================================================================
+2026-01-30 19:27:51,374 - INFO - Completed at: 2026-01-30 19:27:51
+2026-01-30 19:27:51,375 - INFO - Log file saved to: /Users/jana7431/Downloads/DS_PA_V2/distributed-systems-assignment/tests/logs/performance_test_20260130_191442.log
+2026-01-30 19:27:51,375 - INFO - CSV summary saved to: /Users/jana7431/Downloads/DS_PA_V2/distributed-systems-assignment/tests/logs/performance_summary_20260130_192751.csv
+2026-01-30 19:27:51,375 - INFO - Testing complete!
+2026-01-30 19:27:51,375 - INFO - ======================================================================

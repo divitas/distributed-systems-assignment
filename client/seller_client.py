@@ -46,6 +46,26 @@ class SellerClient:
                 pass
             self.socket = None
     
+    def restore_session(self): #JN added
+        """Try to restore existing session using session_id"""
+        if not self.session_id:
+            return False
+        
+        response = self.send_request(
+            API_SELLER_RESTORE_SESSION,
+            {'session_id': self.session_id}
+        )
+        
+        if response and response['status'] == STATUS_SUCCESS:
+            self.seller_id = response['data']['seller_id']
+            self.seller_name = response['data']['seller_name']
+            print(f"\n✓ Session restored. Welcome back, {self.seller_name}!")
+            return True
+        else:
+            # Session invalid/expired, clear it
+            self.session_id = None
+            return False
+    
     def send_request(self, operation, data=None):
         """Send request to server and receive response"""
         try:
@@ -56,6 +76,14 @@ class SellerClient:
         except Exception as e:
             print(f"Communication error: {e}")
             return None
+    
+    def is_session_expired(self, response):
+        """Check if response indicates session expired"""
+        if response and response.get('status') != STATUS_SUCCESS:
+            message = response.get('message', '').lower()
+            if 'session expired' in message or 'invalid session' in message:
+                return True
+        return False
     
     # ========== API Methods ==========
     
@@ -82,6 +110,8 @@ class SellerClient:
         else:
             message = response.get('message', 'Unknown error') if response else 'Connection error'
             print(f"\n✗ Error: {message}")
+        
+        return response
     
     def login(self):
         """Login to seller account"""
@@ -136,6 +166,8 @@ class SellerClient:
         else:
             message = response.get('message', 'Unknown error') if response else 'Connection error'
             print(f"\n✗ Error: {message}")
+        
+        return response
     
     def register_item(self):
         """Register a new item for sale"""
@@ -167,7 +199,7 @@ class SellerClient:
             quantity = int(quantity)
         except ValueError:
             print("\n✗ Invalid input for category, price, or quantity")
-            return
+            return None
         
         response = self.send_request(
             API_SELLER_REGISTER_ITEM,
@@ -188,6 +220,8 @@ class SellerClient:
         else:
             message = response.get('message', 'Unknown error') if response else 'Connection error'
             print(f"\n✗ Error: {message}")
+        
+        return response
     
     def change_price(self):
         """Change price of an item"""
@@ -199,7 +233,7 @@ class SellerClient:
             new_price = float(new_price)
         except ValueError:
             print("\n✗ Invalid price")
-            return
+            return None
         
         response = self.send_request(
             API_SELLER_CHANGE_PRICE,
@@ -214,6 +248,8 @@ class SellerClient:
         else:
             message = response.get('message', 'Unknown error') if response else 'Connection error'
             print(f"\n✗ Error: {message}")
+        
+        return response
     
     def update_units(self):
         """Update (remove) units for sale"""
@@ -225,7 +261,7 @@ class SellerClient:
             quantity = int(quantity)
         except ValueError:
             print("\n✗ Invalid quantity")
-            return
+            return None
         
         response = self.send_request(
             API_SELLER_UPDATE_UNITS,
@@ -240,6 +276,8 @@ class SellerClient:
         else:
             message = response.get('message', 'Unknown error') if response else 'Connection error'
             print(f"\n✗ Error: {message}")
+        
+        return response
     
     def display_items(self):
         """Display all items for sale"""
@@ -258,6 +296,8 @@ class SellerClient:
         else:
             message = response.get('message', 'Unknown error') if response else 'Connection error'
             print(f"\n✗ Error: {message}")
+        
+        return response
     
     # ========== Main Menu ==========
     
@@ -275,7 +315,7 @@ class SellerClient:
         print("0. Exit")
         print("="*50)
     
-    def run(self):
+    def run(self): #JN modified
         """Run the seller client"""
         print("\n" + "="*50)
         print("ONLINE MARKETPLACE - SELLER CLIENT")
@@ -284,45 +324,62 @@ class SellerClient:
         if not self.connect():
             return
         
-        # Login or create account
-        while True:
-            print("\n1. Login")
-            print("2. Create Account")
-            print("0. Exit")
-            choice = input("\nChoice: ").strip()
-            
-            if choice == '1':
-                if self.login():
-                    break
-            elif choice == '2':
-                self.create_account()
-            elif choice == '0':
-                self.disconnect()
-                return
-        
-        # Main menu
-        while self.session_id:
-            self.show_menu()
-            choice = input("\nChoice: ").strip()
-            
-            if choice == '1':
-                self.get_rating()
-            elif choice == '2':
-                self.register_item()
-            elif choice == '3':
-                self.change_price()
-            elif choice == '4':
-                self.update_units()
-            elif choice == '5':
-                self.display_items()
-            elif choice == '6':
-                self.logout()
-            elif choice == '0':
-                if self.session_id:
-                    self.logout()
-                break
+        while True:  # Outer loop to handle session expiration
+            # Try to restore existing session first
+            if self.session_id and self.restore_session():
+                pass  # Session restored, go to main menu
             else:
-                print("\nInvalid choice")
+                # Login or create account
+                while True:
+                    print("\n1. Login")
+                    print("2. Create Account")
+                    print("0. Exit")
+                    choice = input("\nChoice: ").strip()
+                    
+                    if choice == '1':
+                        if self.login():
+                            break
+                    elif choice == '2':
+                        self.create_account()
+                    elif choice == '0':
+                        self.disconnect()
+                        print("\nGoodbye!")
+                        return
+            
+            # Main menu
+            session_active = True
+            while session_active:
+                self.show_menu()
+                choice = input("\nChoice: ").strip()
+                
+                response = None
+                
+                if choice == '1':
+                    response = self.get_rating()
+                elif choice == '2':
+                    response = self.register_item()
+                elif choice == '3':
+                    response = self.change_price()
+                elif choice == '4':
+                    response = self.update_units()
+                elif choice == '5':
+                    response = self.display_items()
+                elif choice == '6':
+                    self.logout()
+                    session_active = False
+                elif choice == '0':
+                    if self.session_id:
+                        self.logout()
+                    self.disconnect()
+                    print("\nGoodbye!")
+                    return
+                else:
+                    print("\nInvalid choice")
+                
+                # Check if session expired - return to outer loop to try restore
+                if response is not None and self.is_session_expired(response):
+                    print("\nSession expired. Attempting to restore...")
+                    session_active = False
         
         self.disconnect()
         print("\nGoodbye!")

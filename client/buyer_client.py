@@ -45,6 +45,26 @@ class BuyerClient:
             except:
                 pass
             self.socket = None
+
+    def restore_session(self):
+        """Try to restore existing session using session_id"""
+        if not self.session_id:
+            return False
+        
+        response = self.send_request(
+            API_BUYER_RESTORE_SESSION,
+            {'session_id': self.session_id}
+        )
+        
+        if response and response['status'] == STATUS_SUCCESS:
+            self.buyer_id = response['data']['buyer_id']
+            self.buyer_name = response['data']['buyer_name']
+            print(f"\n✓ Session restored. Welcome back, {self.buyer_name}!")
+            return True
+        else:
+            # Session invalid/expired, clear it
+            self.session_id = None
+            return False
     
     def send_request(self, operation, data=None):
         """Send request to server and receive response"""
@@ -56,7 +76,15 @@ class BuyerClient:
         except Exception as e:
             print(f"Communication error: {e}")
             return None
-    
+
+    def is_session_expired(self, response):
+        """Check if response indicates session expired"""
+        if response and response.get('status') != STATUS_SUCCESS:
+            message = response.get('message', '').lower()
+            if 'session expired' in message or 'invalid session' in message:
+                return True
+        return False
+
     # ========== API Methods ==========
     
     def create_account(self):
@@ -82,6 +110,8 @@ class BuyerClient:
         else:
             message = response.get('message', 'Unknown error') if response else 'Connection error'
             print(f"\n✗ Error: {message}")
+        
+        return response
     
     def login(self):
         """Login to buyer account"""
@@ -143,7 +173,7 @@ class BuyerClient:
             category = int(category)
         except ValueError:
             print("\n✗ Invalid category")
-            return
+            return None
         
         response = self.send_request(
             API_BUYER_SEARCH_ITEMS,
@@ -166,6 +196,8 @@ class BuyerClient:
         else:
             message = response.get('message', 'Unknown error') if response else 'Connection error'
             print(f"\n✗ Error: {message}")
+        
+        return response
     
     def get_item(self):
         """Get details of a specific item"""
@@ -183,6 +215,8 @@ class BuyerClient:
         else:
             message = response.get('message', 'Unknown error') if response else 'Connection error'
             print(f"\n✗ Error: {message}")
+        
+        return response
     
     def add_to_cart(self):
         """Add item to shopping cart"""
@@ -194,7 +228,7 @@ class BuyerClient:
             quantity = int(quantity)
         except ValueError:
             print("\n✗ Invalid quantity")
-            return
+            return None
         
         response = self.send_request(
             API_BUYER_ADD_TO_CART,
@@ -209,6 +243,8 @@ class BuyerClient:
         else:
             message = response.get('message', 'Unknown error') if response else 'Connection error'
             print(f"\n✗ Error: {message}")
+        
+        return response
     
     def remove_from_cart(self):
         """Remove item from shopping cart"""
@@ -220,7 +256,7 @@ class BuyerClient:
             quantity = int(quantity)
         except ValueError:
             print("\n✗ Invalid quantity")
-            return
+            return None
         
         response = self.send_request(
             API_BUYER_REMOVE_FROM_CART,
@@ -235,6 +271,8 @@ class BuyerClient:
         else:
             message = response.get('message', 'Unknown error') if response else 'Connection error'
             print(f"\n✗ Error: {message}")
+        
+        return response
     
     def save_cart(self):
         """Save cart to persist across sessions"""
@@ -246,13 +284,15 @@ class BuyerClient:
         else:
             message = response.get('message', 'Unknown error') if response else 'Connection error'
             print(f"\n✗ Error: {message}")
+        
+        return response
     
     def clear_cart(self):
         """Clear shopping cart"""
         confirm = input("\nAre you sure you want to clear your cart? (yes/no): ").strip().lower()
         if confirm != 'yes':
             print("Cancelled.")
-            return
+            return None
         
         response = self.send_request(API_BUYER_CLEAR_CART)
         
@@ -261,6 +301,8 @@ class BuyerClient:
         else:
             message = response.get('message', 'Unknown error') if response else 'Connection error'
             print(f"\n✗ Error: {message}")
+        
+        return response
     
     def display_cart(self):
         """Display shopping cart"""
@@ -278,6 +320,8 @@ class BuyerClient:
         else:
             message = response.get('message', 'Unknown error') if response else 'Connection error'
             print(f"\n✗ Error: {message}")
+        
+        return response
     
     def provide_feedback(self):
         """Provide feedback for an item"""
@@ -295,7 +339,7 @@ class BuyerClient:
             feedback = FEEDBACK_THUMBS_DOWN
         else:
             print("\n✗ Invalid choice")
-            return
+            return None
         
         response = self.send_request(
             API_BUYER_PROVIDE_FEEDBACK,
@@ -310,6 +354,8 @@ class BuyerClient:
         else:
             message = response.get('message', 'Unknown error') if response else 'Connection error'
             print(f"\n✗ Error: {message}")
+        
+        return response
     
     def get_seller_rating(self):
         """Get seller rating"""
@@ -320,7 +366,7 @@ class BuyerClient:
             seller_id = int(seller_id)
         except ValueError:
             print("\n✗ Invalid seller ID")
-            return
+            return None
         
         response = self.send_request(
             API_BUYER_GET_SELLER_RATING,
@@ -334,6 +380,8 @@ class BuyerClient:
         else:
             message = response.get('message', 'Unknown error') if response else 'Connection error'
             print(f"\n✗ Error: {message}")
+        
+        return response
     
     def get_purchases(self):
         """Get purchase history"""
@@ -353,6 +401,8 @@ class BuyerClient:
         else:
             message = response.get('message', 'Unknown error') if response else 'Connection error'
             print(f"\n✗ Error: {message}")
+        
+        return response
     
     # ========== Main Menu ==========
     
@@ -375,7 +425,7 @@ class BuyerClient:
         print("0.  Exit")
         print("="*50)
     
-    def run(self):
+    def run(self): #JN modified
         """Run the buyer client"""
         print("\n" + "="*50)
         print("ONLINE MARKETPLACE - BUYER CLIENT")
@@ -384,55 +434,72 @@ class BuyerClient:
         if not self.connect():
             return
         
-        # Login or create account
-        while True:
-            print("\n1. Login")
-            print("2. Create Account")
-            print("0. Exit")
-            choice = input("\nChoice: ").strip()
-            
-            if choice == '1':
-                if self.login():
-                    break
-            elif choice == '2':
-                self.create_account()
-            elif choice == '0':
-                self.disconnect()
-                return
-        
-        # Main menu
-        while self.session_id:
-            self.show_menu()
-            choice = input("\nChoice: ").strip()
-            
-            if choice == '1':
-                self.search_items()
-            elif choice == '2':
-                self.get_item()
-            elif choice == '3':
-                self.add_to_cart()
-            elif choice == '4':
-                self.remove_from_cart()
-            elif choice == '5':
-                self.display_cart()
-            elif choice == '6':
-                self.save_cart()
-            elif choice == '7':
-                self.clear_cart()
-            elif choice == '8':
-                self.provide_feedback()
-            elif choice == '9':
-                self.get_seller_rating()
-            elif choice == '10':
-                self.get_purchases()
-            elif choice == '11':
-                self.logout()
-            elif choice == '0':
-                if self.session_id:
-                    self.logout()
-                break
+        while True:  # Outer loop to handle session expiration
+            # Try to restore existing session first
+            if self.session_id and self.restore_session():
+                pass  # Session restored, go to main menu
             else:
-                print("\nInvalid choice")
+                # Login or create account
+                while True:
+                    print("\n1. Login")
+                    print("2. Create Account")
+                    print("0. Exit")
+                    choice = input("\nChoice: ").strip()
+                    
+                    if choice == '1':
+                        if self.login():
+                            break
+                    elif choice == '2':
+                        self.create_account()
+                    elif choice == '0':
+                        self.disconnect()
+                        print("\nGoodbye!")
+                        return
+            
+            # Main menu
+            session_active = True
+            while session_active:
+                self.show_menu()
+                choice = input("\nChoice: ").strip()
+                
+                response = None
+                
+                if choice == '1':
+                    response = self.search_items()
+                elif choice == '2':
+                    response = self.get_item()
+                elif choice == '3':
+                    response = self.add_to_cart()
+                elif choice == '4':
+                    response = self.remove_from_cart()
+                elif choice == '5':
+                    response = self.display_cart()
+                elif choice == '6':
+                    response = self.save_cart()
+                elif choice == '7':
+                    response = self.clear_cart()
+                elif choice == '8':
+                    response = self.provide_feedback()
+                elif choice == '9':
+                    response = self.get_seller_rating()
+                elif choice == '10':
+                    response = self.get_purchases()
+                elif choice == '11':
+                    self.logout()
+                    session_active = False
+                elif choice == '0':
+                    if self.session_id:
+                        self.logout()
+                    self.disconnect()
+                    print("\nGoodbye!")
+                    return
+                else:
+                    print("\nInvalid choice")
+                
+                # Check if session expired - return to outer loop to try restore
+                if response is not None and self.is_session_expired(response):
+                    print("\nSession expired. Attempting to restore...")
+                    session_active = False
         
         self.disconnect()
         print("\nGoodbye!")

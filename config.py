@@ -6,19 +6,19 @@ Modify these settings to match your deployment environment
 # ============================================================================
 # DATABASE SERVER CONFIGURATIONS
 # ============================================================================
-CUSTOMER_DB_HOST = "localhost"
+CUSTOMER_DB_HOST = "10.224.78.211" # vm1 "localhost"
 CUSTOMER_DB_PORT = 5001
 
-PRODUCT_DB_HOST = "localhost"
+PRODUCT_DB_HOST = "10.224.76.57" # vm2 "localhost"
 PRODUCT_DB_PORT = 5002
 
 # ============================================================================
 # FRONTEND SERVER CONFIGURATIONS
 # ============================================================================
-BUYER_FRONTEND_HOST = "localhost"
+BUYER_FRONTEND_HOST = "10.224.79.148" # vm3 "localhost"
 BUYER_FRONTEND_PORT = 6001
 
-SELLER_FRONTEND_HOST = "localhost"
+SELLER_FRONTEND_HOST = "10.224.79.250" # vm4 "localhost"
 SELLER_FRONTEND_PORT = 6002
 
 # ============================================================================
@@ -45,7 +45,7 @@ PRODUCT_DB_FILE = "data/product.db"
 DB_POOL_SIZE = 20  # Number of connections to maintain in pool
 DB_MAX_OVERFLOW = 30  # Additional connections allowed beyond pool size
 
-# ============================================================================
+# ==================t==========================================================
 # SEARCH CONFIGURATION
 # ============================================================================
 MAX_SEARCH_RESULTS = 100

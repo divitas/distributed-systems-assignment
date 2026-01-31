@@ -1,0 +1,4 @@
+Scenario,Num_Sellers,Num_Buyers,Ops_Per_Client,Num_Runs,Avg_Response_Time_ms,Median_Response_Time_ms,StdDev_Response_Time_ms,Avg_Throughput_ops_sec,Median_Throughput_ops_sec,StdDev_Throughput_ops_sec,Total_Operations,Total_Errors,Error_Rate_Percent
+Light Load (1S+1B),1,1,100,10,35.10,35.09,1.32,50.99,50.90,1.46,9070,0,0.00
+Medium Load (10S+10B),10,10,50,10,117.65,116.53,4.96,145.41,145.18,5.43,45700,0,0.00
+Heavy Load (100S+100B),100,100,5,10,864.96,848.55,66.14,152.77,158.10,11.94,44655,855,1.91

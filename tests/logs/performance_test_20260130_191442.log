@@ -85,12 +85,12 @@ Run 10/10...
 2026-01-30 19:17:42,712 - INFO -   Median: 35.09ms
 2026-01-30 19:17:42,712 - INFO -   StdDev: 1.32ms
 2026-01-30 19:17:42,712 - INFO - 
-Average Throughput:
+                                Average Throughput:
 2026-01-30 19:17:42,712 - INFO -   Mean:   50.99 ops/sec
 2026-01-30 19:17:42,712 - INFO -   Median: 50.90 ops/sec
 2026-01-30 19:17:42,712 - INFO -   StdDev: 1.46 ops/sec
 2026-01-30 19:17:42,712 - INFO - 
-Total Operations: 9070
+                                Total Operations: 9070
 2026-01-30 19:17:42,712 - INFO - Total Errors: 0
 2026-01-30 19:17:42,713 - INFO - Error Rate: 0.00%
 2026-01-30 19:17:42,713 - INFO - 
@@ -172,12 +172,12 @@ Run 10/10...
 2026-01-30 19:22:57,492 - INFO -   Median: 116.53ms
 2026-01-30 19:22:57,492 - INFO -   StdDev: 4.96ms
 2026-01-30 19:22:57,492 - INFO - 
-Average Throughput:
+                                Average Throughput:
 2026-01-30 19:22:57,492 - INFO -   Mean:   145.41 ops/sec
 2026-01-30 19:22:57,493 - INFO -   Median: 145.18 ops/sec
 2026-01-30 19:22:57,493 - INFO -   StdDev: 5.43 ops/sec
 2026-01-30 19:22:57,493 - INFO - 
-Total Operations: 45700
+                                Total Operations: 45700
 2026-01-30 19:22:57,493 - INFO - Total Errors: 0
 2026-01-30 19:22:57,494 - INFO - Error Rate: 0.00%
 2026-01-30 19:22:57,494 - INFO - 
@@ -259,12 +259,12 @@ Run 10/10...
 2026-01-30 19:27:51,367 - INFO -   Median: 848.55ms
 2026-01-30 19:27:51,367 - INFO -   StdDev: 66.14ms
 2026-01-30 19:27:51,367 - INFO - 
-Average Throughput:
+                                Average Throughput:
 2026-01-30 19:27:51,367 - INFO -   Mean:   152.77 ops/sec
 2026-01-30 19:27:51,367 - INFO -   Median: 158.10 ops/sec
 2026-01-30 19:27:51,367 - INFO -   StdDev: 11.94 ops/sec
 2026-01-30 19:27:51,367 - INFO - 
-Total Operations: 44655
+                                Total Operations: 44655
 2026-01-30 19:27:51,367 - INFO - Total Errors: 855
 2026-01-30 19:27:51,367 - INFO - Error Rate: 1.91%
 2026-01-30 19:27:51,368 - INFO - 
@@ -272,7 +272,7 @@ Total Operations: 44655
 2026-01-30 19:27:51,368 - INFO - PERFORMANCE SUMMARY
 2026-01-30 19:27:51,368 - INFO - ======================================================================
 2026-01-30 19:27:51,369 - INFO - 
-Scenario                  Avg RT (ms)     Avg Throughput (ops/s)   
+                                Scenario                  Avg RT (ms)     Avg Throughput (ops/s)   
 2026-01-30 19:27:51,369 - INFO - ----------------------------------------------------------------------
 2026-01-30 19:27:51,369 - INFO - Scenario 1 (1S+1B)        35.10           50.99                    
 2026-01-30 19:27:51,370 - INFO - Scenario 2 (10S+10B)      117.65          145.41                   

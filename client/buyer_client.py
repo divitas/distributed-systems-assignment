@@ -1,316 +1,219 @@
 """
-Buyer CLI Client
-Interactive command-line interface for buyers
+Buyer CLI Client - REST version
 """
 
-import socket
+import requests
 import sys
 import os
 
-# Add parent directory to path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import config
-from shared.protocol import Protocol
 from shared.constants import *
 from shared.utils import format_feedback, format_item_display
 
+BASE_URL = f"http://{config.BUYER_FRONTEND_HOST}:{config.BUYER_FRONTEND_PORT}"
+
 
 class BuyerClient:
-    """Buyer CLI Client"""
-    
-    def __init__(self, host, port):
-        self.host = host
-        self.port = port
-        self.socket = None
+
+    def __init__(self):
         self.session_id = None
         self.buyer_id = None
         self.buyer_name = None
-    
-    def connect(self):
-        """Connect to buyer frontend server"""
+
+    def _post(self, endpoint, data):
         try:
-            self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            self.socket.connect((self.host, self.port))
-            return True
+            r = requests.post(f"{BASE_URL}{endpoint}", json=data, timeout=30)
+            return r.json()
         except Exception as e:
-            print(f"Error connecting to server: {e}")
-            return False
-    
-    def disconnect(self):
-        """Disconnect from server"""
-        if self.socket:
-            try:
-                self.socket.close()
-            except:
-                pass
-            self.socket = None
+            print(f"Connection error: {e}")
+            return None
+
+    def _get(self, endpoint, params=None):
+        try:
+            r = requests.get(f"{BASE_URL}{endpoint}", params=params, timeout=30)
+            return r.json()
+        except Exception as e:
+            print(f"Connection error: {e}")
+            return None
 
     def restore_session(self):
-        """Try to restore existing session using session_id"""
         if not self.session_id:
             return False
-        
-        response = self.send_request(
-            API_BUYER_RESTORE_SESSION,
-            {'session_id': self.session_id}
-        )
-        
-        if response and response['status'] == STATUS_SUCCESS:
+        response = self._post("/buyer/restore_session", {"session_id": self.session_id})
+        if response and response.get('status') == 'success':
             self.buyer_id = response['data']['buyer_id']
             self.buyer_name = response['data']['buyer_name']
             print(f"\n✓ Session restored. Welcome back, {self.buyer_name}!")
             return True
-        else:
-            # Session invalid/expired, clear it
-            self.session_id = None
-            return False
-    
-    def send_request(self, operation, data=None):
-        """Send request to server and receive response"""
-        try:
-            request = Protocol.create_request(operation, data, self.session_id)
-            Protocol.send_message(self.socket, request)
-            response = Protocol.receive_message(self.socket)
-            return response
-        except Exception as e:
-            print(f"Communication error: {e}")
-            return None
-
-    def is_session_expired(self, response):
-        """Check if response indicates session expired"""
-        if response and response.get('status') != STATUS_SUCCESS:
-            message = response.get('message', '').lower()
-            if 'session expired' in message or 'invalid session' in message:
-                return True
+        self.session_id = None
         return False
 
-    # ========== API Methods ==========
-    
     def create_account(self):
-        """Create a new buyer account"""
         print("\n=== Create Buyer Account ===")
         username = input("Enter username: ").strip()
         password = input("Enter password: ").strip()
         buyer_name = input("Enter your name (display name): ").strip()
-        
-        response = self.send_request(
-            API_BUYER_CREATE_ACCOUNT,
-            {
-                'username': username,
-                'password': password,
-                'buyer_name': buyer_name
-            }
-        )
-        
-        if response and response['status'] == STATUS_SUCCESS:
-            buyer_id = response['data']['buyer_id']
-            print(f"\n✓ Account created successfully!")
-            print(f"Your Buyer ID: {buyer_id}")
+
+        response = self._post("/buyer/create_account", {
+            'username': username, 'password': password, 'buyer_name': buyer_name
+        })
+
+        if response and response.get('status') == 'success':
+            print(f"\n✓ Account created! Buyer ID: {response['data']['buyer_id']}")
         else:
-            message = response.get('message', 'Unknown error') if response else 'Connection error'
-            print(f"\n✗ Error: {message}")
-        
-        return response
-    
+            print(f"\n✗ Error: {response.get('message', 'Unknown error') if response else 'Connection error'}")
+
     def login(self):
-        """Login to buyer account"""
         print("\n=== Buyer Login ===")
         username = input("Username: ").strip()
         password = input("Password: ").strip()
-        
-        response = self.send_request(
-            API_BUYER_LOGIN,
-            {
-                'username': username,
-                'password': password
-            }
-        )
-        
-        if response and response['status'] == STATUS_SUCCESS:
+
+        response = self._post("/buyer/login", {'username': username, 'password': password})
+
+        if response and response.get('status') == 'success':
             self.session_id = response['data']['session_id']
             self.buyer_id = response['data']['buyer_id']
             self.buyer_name = response['data']['buyer_name']
-            print(f"\n✓ Welcome, {self.buyer_name}!")
-            print(f"Buyer ID: {self.buyer_id}")
+            print(f"\n✓ Welcome, {self.buyer_name}! Buyer ID: {self.buyer_id}")
             return True
         else:
-            message = response.get('message', 'Unknown error') if response else 'Connection error'
-            print(f"\n✗ Login failed: {message}")
+            print(f"\n✗ Login failed: {response.get('message', 'Unknown error') if response else 'Connection error'}")
             return False
-    
+
     def logout(self):
-        """Logout from buyer account"""
         if not self.session_id:
             print("Not logged in.")
             return
-        
-        response = self.send_request(API_BUYER_LOGOUT)
-        
-        if response and response['status'] == STATUS_SUCCESS:
-            print("\n✓ Logged out successfully")
-            print("Note: Your cart has been cleared. Use 'Save Cart' before logging out to persist your cart.")
-            self.session_id = None
-            self.buyer_id = None
-            self.buyer_name = None
-        else:
-            print("\n✗ Logout failed")
-    
+        self._post("/buyer/logout", {"session_id": self.session_id})
+        print("\n✓ Logged out successfully")
+        print("Note: Your cart has been cleared. Use 'Save Cart' before logging out to persist your cart.")
+        self.session_id = None
+        self.buyer_id = None
+        self.buyer_name = None
+
     def search_items(self):
-        """Search for items"""
         print("\n=== Search Items ===")
-        
         print("\nCategories:")
         for cat_id, cat_name in config.ITEM_CATEGORIES.items():
             print(f"  {cat_id}. {cat_name}")
         category = input("Select category (1-8): ").strip()
-        
-        print("Enter keywords to search (comma-separated, optional):")
-        keywords_input = input("Keywords: ").strip()
+
+        keywords_input = input("Enter keywords (comma-separated, optional): ").strip()
         keywords = [k.strip() for k in keywords_input.split(',') if k.strip()][:5]
-        
+
         try:
             category = int(category)
         except ValueError:
             print("\n✗ Invalid category")
             return None
-        
-        response = self.send_request(
-            API_BUYER_SEARCH_ITEMS,
-            {
-                'category': category,
-                'keywords': keywords
-            }
-        )
-        
-        if response and response['status'] == STATUS_SUCCESS:
+
+        response = self._post("/buyer/search_items", {
+            'session_id': self.session_id, 'category': category, 'keywords': keywords
+        })
+
+        if response and response.get('status') == 'success':
             items = response['data']['items']
-            
             if not items:
-                print("\nNo items found matching your search.")
+                print("\nNo items found.")
             else:
                 print(f"\n=== Search Results ({len(items)} items found) ===")
                 for i, item in enumerate(items, 1):
                     print(f"\n--- Item {i} ---")
                     print(format_item_display(item))
         else:
-            message = response.get('message', 'Unknown error') if response else 'Connection error'
-            print(f"\n✗ Error: {message}")
-        
+            print(f"\n✗ Error: {response.get('message', 'Unknown error') if response else 'Connection error'}")
+
         return response
-    
+
     def get_item(self):
-        """Get details of a specific item"""
         print("\n=== Get Item Details ===")
         item_id = input("Item ID: ").strip()
-        
-        response = self.send_request(
-            API_BUYER_GET_ITEM,
-            {'item_id': item_id}
-        )
-        
-        if response and response['status'] == STATUS_SUCCESS:
-            item = response['data']['item']
-            print("\n" + format_item_display(item))
+
+        response = self._get("/buyer/get_item", {"session_id": self.session_id, "item_id": item_id})
+
+        if response and response.get('status') == 'success':
+            print("\n" + format_item_display(response['data']['item']))
         else:
-            message = response.get('message', 'Unknown error') if response else 'Connection error'
-            print(f"\n✗ Error: {message}")
-        
+            print(f"\n✗ Error: {response.get('message', 'Unknown error') if response else 'Connection error'}")
+
         return response
-    
+
     def add_to_cart(self):
-        """Add item to shopping cart"""
         print("\n=== Add Item to Cart ===")
         item_id = input("Item ID: ").strip()
         quantity = input("Quantity: ").strip()
-        
+
         try:
             quantity = int(quantity)
         except ValueError:
             print("\n✗ Invalid quantity")
             return None
-        
-        response = self.send_request(
-            API_BUYER_ADD_TO_CART,
-            {
-                'item_id': item_id,
-                'quantity': quantity
-            }
-        )
-        
-        if response and response['status'] == STATUS_SUCCESS:
+
+        response = self._post("/buyer/add_to_cart", {
+            'session_id': self.session_id, 'item_id': item_id, 'quantity': quantity
+        })
+
+        if response and response.get('status') == 'success':
             print(f"\n✓ Added {quantity} unit(s) to cart")
         else:
-            message = response.get('message', 'Unknown error') if response else 'Connection error'
-            print(f"\n✗ Error: {message}")
-        
+            print(f"\n✗ Error: {response.get('message', 'Unknown error') if response else 'Connection error'}")
+
         return response
-    
+
     def remove_from_cart(self):
-        """Remove item from shopping cart"""
         print("\n=== Remove Item from Cart ===")
         item_id = input("Item ID: ").strip()
         quantity = input("Quantity to remove: ").strip()
-        
+
         try:
             quantity = int(quantity)
         except ValueError:
             print("\n✗ Invalid quantity")
             return None
-        
-        response = self.send_request(
-            API_BUYER_REMOVE_FROM_CART,
-            {
-                'item_id': item_id,
-                'quantity': quantity
-            }
-        )
-        
-        if response and response['status'] == STATUS_SUCCESS:
+
+        response = self._post("/buyer/remove_from_cart", {
+            'session_id': self.session_id, 'item_id': item_id, 'quantity': quantity
+        })
+
+        if response and response.get('status') == 'success':
             print(f"\n✓ Removed {quantity} unit(s) from cart")
         else:
-            message = response.get('message', 'Unknown error') if response else 'Connection error'
-            print(f"\n✗ Error: {message}")
-        
+            print(f"\n✗ Error: {response.get('message', 'Unknown error') if response else 'Connection error'}")
+
         return response
-    
+
     def save_cart(self):
-        """Save cart to persist across sessions"""
-        response = self.send_request(API_BUYER_SAVE_CART)
-        
-        if response and response['status'] == STATUS_SUCCESS:
+        response = self._post("/buyer/save_cart", {"session_id": self.session_id})
+
+        if response and response.get('status') == 'success':
             print("\n✓ Cart saved successfully")
-            print("Your cart will be available in all your sessions.")
         else:
-            message = response.get('message', 'Unknown error') if response else 'Connection error'
-            print(f"\n✗ Error: {message}")
-        
+            print(f"\n✗ Error: {response.get('message', 'Unknown error') if response else 'Connection error'}")
+
         return response
-    
+
     def clear_cart(self):
-        """Clear shopping cart"""
         confirm = input("\nAre you sure you want to clear your cart? (yes/no): ").strip().lower()
         if confirm != 'yes':
             print("Cancelled.")
             return None
-        
-        response = self.send_request(API_BUYER_CLEAR_CART)
-        
-        if response and response['status'] == STATUS_SUCCESS:
+
+        response = self._post("/buyer/clear_cart", {"session_id": self.session_id})
+
+        if response and response.get('status') == 'success':
             print("\n✓ Cart cleared")
         else:
-            message = response.get('message', 'Unknown error') if response else 'Connection error'
-            print(f"\n✗ Error: {message}")
-        
+            print(f"\n✗ Error: {response.get('message', 'Unknown error') if response else 'Connection error'}")
+
         return response
-    
+
     def display_cart(self):
-        """Display shopping cart"""
-        response = self.send_request(API_BUYER_DISPLAY_CART)
-        
-        if response and response['status'] == STATUS_SUCCESS:
+        response = self._get("/buyer/display_cart", {"session_id": self.session_id})
+
+        if response and response.get('status') == 'success':
             cart = response['data']['cart']
-            
             if not cart:
                 print("\nYour shopping cart is empty.")
             else:
@@ -318,96 +221,107 @@ class BuyerClient:
                 for i, item in enumerate(cart, 1):
                     print(f"{i}. Item ID: {item['item_id']}, Quantity: {item['quantity']}")
         else:
-            message = response.get('message', 'Unknown error') if response else 'Connection error'
-            print(f"\n✗ Error: {message}")
-        
+            print(f"\n✗ Error: {response.get('message', 'Unknown error') if response else 'Connection error'}")
+
         return response
-    
+
     def provide_feedback(self):
-        """Provide feedback for an item"""
         print("\n=== Provide Feedback ===")
         item_id = input("Item ID: ").strip()
-        
-        print("\nFeedback:")
-        print("  1. Thumbs Up 👍")
-        print("  2. Thumbs Down 👎")
+        seller_id = input("Seller ID: ").strip()
+
+        print("\n1. Thumbs Up 👍\n2. Thumbs Down 👎")
         feedback_choice = input("Select (1 or 2): ").strip()
-        
+
         if feedback_choice == '1':
-            feedback = FEEDBACK_THUMBS_UP
+            thumbs = 1
         elif feedback_choice == '2':
-            feedback = FEEDBACK_THUMBS_DOWN
+            thumbs = 0
         else:
             print("\n✗ Invalid choice")
             return None
-        
-        response = self.send_request(
-            API_BUYER_PROVIDE_FEEDBACK,
-            {
-                'item_id': item_id,
-                'feedback': feedback
-            }
-        )
-        
-        if response and response['status'] == STATUS_SUCCESS:
-            print(f"\n✓ Feedback recorded")
+
+        response = self._post("/buyer/provide_feedback", {
+            'session_id': self.session_id,
+            'item_id': item_id,
+            'seller_id': seller_id,
+            'thumbs': thumbs
+        })
+
+        if response and response.get('status') == 'success':
+            print("\n✓ Feedback recorded")
         else:
-            message = response.get('message', 'Unknown error') if response else 'Connection error'
-            print(f"\n✗ Error: {message}")
-        
+            print(f"\n✗ Error: {response.get('message', 'Unknown error') if response else 'Connection error'}")
+
         return response
-    
+
     def get_seller_rating(self):
-        """Get seller rating"""
         print("\n=== Get Seller Rating ===")
         seller_id = input("Seller ID: ").strip()
-        
-        try:
-            seller_id = int(seller_id)
-        except ValueError:
-            print("\n✗ Invalid seller ID")
-            return None
-        
-        response = self.send_request(
-            API_BUYER_GET_SELLER_RATING,
-            {'seller_id': seller_id}
-        )
-        
-        if response and response['status'] == STATUS_SUCCESS:
-            thumbs_up = response['data']['thumbs_up']
-            thumbs_down = response['data']['thumbs_down']
-            print(f"\nSeller {seller_id} Rating: {format_feedback(thumbs_up, thumbs_down)}")
+
+        response = self._get("/buyer/get_seller_rating", {
+            "session_id": self.session_id, "seller_id": seller_id
+        })
+
+        if response and response.get('status') == 'success':
+            d = response['data']
+            print(f"\nSeller {seller_id} Rating: {format_feedback(d['thumbs_up'], d['thumbs_down'])}")
         else:
-            message = response.get('message', 'Unknown error') if response else 'Connection error'
-            print(f"\n✗ Error: {message}")
-        
+            print(f"\n✗ Error: {response.get('message', 'Unknown error') if response else 'Connection error'}")
+
         return response
-    
+
     def get_purchases(self):
-        """Get purchase history"""
-        response = self.send_request(API_BUYER_GET_PURCHASES)
-        
-        if response and response['status'] == STATUS_SUCCESS:
+        response = self._get("/buyer/get_purchases", {"session_id": self.session_id})
+
+        if response and response.get('status') == 'success':
             purchases = response['data']['purchases']
-            
             if not purchases:
                 print("\nNo purchase history.")
             else:
                 print(f"\n=== Purchase History ({len(purchases)} items) ===")
-                for i, purchase in enumerate(purchases, 1):
-                    print(f"{i}. Item ID: {purchase['item_id']}, "
-                          f"Quantity: {purchase['quantity']}, "
-                          f"Date: {purchase.get('purchase_date', 'N/A')}")
+                for i, p in enumerate(purchases, 1):
+                    print(f"{i}. Item ID: {p['item_id']}, Quantity: {p['quantity']}, Date: {p.get('purchase_date', 'N/A')}")
         else:
-            message = response.get('message', 'Unknown error') if response else 'Connection error'
-            print(f"\n✗ Error: {message}")
-        
+            print(f"\n✗ Error: {response.get('message', 'Unknown error') if response else 'Connection error'}")
+
         return response
-    
-    # ========== Main Menu ==========
-    
+
+    def make_purchase(self):
+        print("\n=== Make Purchase ===")
+        item_id = input("Item ID: ").strip()
+        quantity = input("Quantity: ").strip()
+
+        try:
+            quantity = int(quantity)
+        except ValueError:
+            print("\n✗ Invalid quantity")
+            return None
+
+        print("\n--- Payment Information ---")
+        card_name = input("Name on card: ").strip()
+        card_number = input("Card number: ").strip()
+        expiration_date = input("Expiration date (MM/YY): ").strip()
+        security_code = input("Security code: ").strip()
+
+        response = self._post("/buyer/make_purchase", {
+            'session_id': self.session_id,
+            'item_id': item_id,
+            'quantity': quantity,
+            'card_name': card_name,
+            'card_number': card_number,
+            'expiration_date': expiration_date,
+            'security_code': security_code
+        })
+
+        if response and response.get('status') == 'success':
+            print("\n✓ Purchase completed successfully!")
+        else:
+            print(f"\n✗ Error: {response.get('message', 'Unknown error') if response else 'Connection error'}")
+
+        return response
+
     def show_menu(self):
-        """Show main menu"""
         print("\n" + "="*50)
         print("BUYER MENU")
         print("="*50)
@@ -418,99 +332,75 @@ class BuyerClient:
         print("5.  Display Cart")
         print("6.  Save Cart")
         print("7.  Clear Cart")
-        print("8.  Provide Feedback")
-        print("9.  Get Seller Rating")
-        print("10. View Purchase History")
-        print("11. Logout")
+        print("8.  Make Purchase")
+        print("9.  Provide Feedback")
+        print("10. Get Seller Rating")
+        print("11. View Purchase History")
+        print("12. Logout")
         print("0.  Exit")
         print("="*50)
-    
-    def run(self): #JN modified
-        """Run the buyer client"""
+
+    def run(self):
         print("\n" + "="*50)
         print("ONLINE MARKETPLACE - BUYER CLIENT")
         print("="*50)
-        
-        if not self.connect():
-            return
-        
-        while True:  # Outer loop to handle session expiration
-            # Try to restore existing session first
+
+        while True:
             if self.session_id and self.restore_session():
-                pass  # Session restored, go to main menu
+                pass
             else:
-                # Login or create account
                 while True:
-                    print("\n1. Login")
-                    print("2. Create Account")
-                    print("0. Exit")
+                    print("\n1. Login\n2. Create Account\n0. Exit")
                     choice = input("\nChoice: ").strip()
-                    
                     if choice == '1':
                         if self.login():
                             break
                     elif choice == '2':
                         self.create_account()
                     elif choice == '0':
-                        self.disconnect()
                         print("\nGoodbye!")
                         return
-            
-            # Main menu
-            session_active = True
-            while session_active:
+
+            while True:
                 self.show_menu()
                 choice = input("\nChoice: ").strip()
-                
-                response = None
-                
+
                 if choice == '1':
-                    response = self.search_items()
+                    self.search_items()
                 elif choice == '2':
-                    response = self.get_item()
+                    self.get_item()
                 elif choice == '3':
-                    response = self.add_to_cart()
+                    self.add_to_cart()
                 elif choice == '4':
-                    response = self.remove_from_cart()
+                    self.remove_from_cart()
                 elif choice == '5':
-                    response = self.display_cart()
+                    self.display_cart()
                 elif choice == '6':
-                    response = self.save_cart()
+                    self.save_cart()
                 elif choice == '7':
-                    response = self.clear_cart()
+                    self.clear_cart()
                 elif choice == '8':
-                    response = self.provide_feedback()
+                    self.make_purchase()
                 elif choice == '9':
-                    response = self.get_seller_rating()
+                    self.provide_feedback()
                 elif choice == '10':
-                    response = self.get_purchases()
+                    self.get_seller_rating()
                 elif choice == '11':
+                    self.get_purchases()
+                elif choice == '12':
                     self.logout()
-                    session_active = False
+                    break
                 elif choice == '0':
                     if self.session_id:
                         self.logout()
-                    self.disconnect()
                     print("\nGoodbye!")
                     return
                 else:
                     print("\nInvalid choice")
-                
-                # Check if session expired - return to outer loop to try restore
-                if response is not None and self.is_session_expired(response):
-                    print("\nSession expired. Attempting to restore...")
-                    session_active = False
-        
-        self.disconnect()
-        print("\nGoodbye!")
 
 
 def main():
-    """Main entry point"""
-    client = BuyerClient(
-        host=config.BUYER_FRONTEND_HOST,
-        port=config.BUYER_FRONTEND_PORT
-    )
+    client = BuyerClient()
     client.run()
 
 

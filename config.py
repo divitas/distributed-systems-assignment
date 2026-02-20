@@ -22,6 +22,13 @@ SELLER_FRONTEND_HOST = "10.224.79.170" # vm4 "localhost"
 SELLER_FRONTEND_PORT = 6002
 
 # ============================================================================
+# FINANCIAL SERVICE CONFIGURATIONS
+# ============================================================================
+
+FINANCIAL_SERVICE_HOST = "10.224.77.206" # vm5 "localhost"
+FINANCIAL_SERVICE_PORT = 7000
+
+# ============================================================================
 # SESSION CONFIGURATION
 # ============================================================================
 SESSION_TIMEOUT = 300  # 5 minutes in seconds

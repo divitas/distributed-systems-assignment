@@ -1,58 +1,53 @@
+"""
+Financial Transactions Service - Simple SOAP over HTTP
+Runs on VM5, port 7000
+"""
+
 from flask import Flask, request, Response
 import random
 
 app = Flask(__name__)
 
-WSDL = """<?xml version="1.0" encoding="UTF-8"?>
+@app.route('/', methods=['GET'])
+def wsdl():
+    wsdl = """<?xml version="1.0" encoding="UTF-8"?>
 <definitions xmlns="http://schemas.xmlsoap.org/wsdl/"
              xmlns:soap="http://schemas.xmlsoap.org/wsdl/soap/"
-             xmlns:tns="financial.transactions"
              targetNamespace="financial.transactions">
-  <message name="PaymentRequest">
-    <part name="name" type="xsd:string"/>
-    <part name="card_number" type="xsd:string"/>
-    <part name="expiration_date" type="xsd:string"/>
-    <part name="security_code" type="xsd:string"/>
-  </message>
-  <message name="PaymentResponse">
-    <part name="result" type="xsd:boolean"/>
-  </message>
+  <message name="PaymentRequest"/>
+  <message name="PaymentResponse"/>
   <portType name="FinancialServicePortType">
     <operation name="ProcessPayment">
-      <input message="tns:PaymentRequest"/>
-      <output message="tns:PaymentResponse"/>
+      <input message="PaymentRequest"/>
+      <output message="PaymentResponse"/>
     </operation>
   </portType>
-  <binding name="FinancialServiceBinding" type="tns:FinancialServicePortType">
+  <binding name="FinancialServiceBinding" type="FinancialServicePortType">
     <soap:binding style="rpc" transport="http://schemas.xmlsoap.org/soap/http"/>
     <operation name="ProcessPayment">
       <soap:operation soapAction="ProcessPayment"/>
-      <input><soap:body use="literal"/></input>
-      <output><soap:body use="literal"/></output>
     </operation>
   </binding>
   <service name="FinancialService">
-    <port name="FinancialServicePort" binding="tns:FinancialServiceBinding">
-      <soap:address location="http://localhost:7000/"/>
+    <port name="FinancialServicePort" binding="FinancialServiceBinding">
+      <soap:address location="http://0.0.0.0:7000/"/>
     </port>
   </service>
 </definitions>"""
-
-@app.route('/', methods=['GET'])
-def wsdl():
-    return Response(WSDL, mimetype='text/xml')
+    return Response(wsdl, mimetype='text/xml')
 
 @app.route('/', methods=['POST'])
 def process():
+    # 90% approval rate as per requirements
     result = 'true' if random.random() < 0.9 else 'false'
-    response_xml = f"""<?xml version="1.0"?>
+    response_xml = """<?xml version="1.0"?>
 <soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/">
   <soap:Body>
     <ProcessPaymentResponse>
-      <result>{result}</result>
+      <r>{}</r>
     </ProcessPaymentResponse>
   </soap:Body>
-</soap:Envelope>"""
+</soap:Envelope>""".format(result)
     return Response(response_xml, mimetype='text/xml')
 
 if __name__ == '__main__':

@@ -1,6 +1,6 @@
 """
 Buyer Frontend Server - FastAPI + gRPC version
-Includes MakePurchase with SOAP financial service
+Includes MakePurchase with SOAP financial service (via raw HTTP)
 """
 
 import grpc
@@ -12,7 +12,6 @@ from pydantic import BaseModel
 from typing import List, Optional
 import uvicorn
 import requests as http_requests
-from zeep import Client as SOAPClient
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'proto'))
@@ -49,6 +48,28 @@ def validate_session(session_id: str):
         raise HTTPException(status_code=401, detail=response.message)
     return json.loads(response.json_data)['buyer_id']
 
+def call_financial_service(card_name, card_number, expiration_date, security_code):
+    """Call SOAP financial service via raw HTTP request"""
+    soap_body = """<?xml version="1.0"?>
+<soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/">
+  <soap:Body>
+    <ProcessPayment>
+      <name>{}</name>
+      <card_number>{}</card_number>
+      <expiration_date>{}</expiration_date>
+      <security_code>{}</security_code>
+    </ProcessPayment>
+  </soap:Body>
+</soap:Envelope>""".format(card_name, card_number, expiration_date, security_code)
+
+    response = http_requests.post(
+        f'http://{config.FINANCIAL_SERVICE_HOST}:{config.FINANCIAL_SERVICE_PORT}/',
+        data=soap_body,
+        headers={'Content-Type': 'text/xml'},
+        timeout=10
+    )
+    return '<result>true</result>' in response.text
+
 # ========== Request Models ==========
 
 class CreateAccountRequest(BaseModel):
@@ -80,7 +101,7 @@ class FeedbackRequest(BaseModel):
     session_id: str
     item_id: str
     seller_id: str
-    thumbs: int  # 1 = up, 0 = down
+    thumbs: int
 
 class MakePurchaseRequest(BaseModel):
     session_id: str
@@ -97,9 +118,7 @@ class MakePurchaseRequest(BaseModel):
 async def create_account(body: CreateAccountRequest):
     stub = get_customer_stub()
     response = stub.CreateBuyer(customer_pb2.CreateBuyerRequest(
-        username=body.username,
-        password=body.password,
-        buyer_name=body.buyer_name
+        username=body.username, password=body.password, buyer_name=body.buyer_name
     ))
     return parse(response)
 
@@ -107,8 +126,7 @@ async def create_account(body: CreateAccountRequest):
 async def login(body: LoginRequest):
     stub = get_customer_stub()
     response = stub.LoginBuyer(customer_pb2.LoginRequest(
-        username=body.username,
-        password=body.password
+        username=body.username, password=body.password
     ))
     return parse(response)
 
@@ -129,8 +147,7 @@ async def search_items(body: SearchRequest):
     validate_session(body.session_id)
     stub = get_product_stub()
     response = stub.SearchItems(product_pb2.SearchRequest(
-        category=body.category,
-        keywords=body.keywords
+        category=body.category, keywords=body.keywords
     ))
     return parse(response)
 
@@ -146,10 +163,8 @@ async def add_to_cart(body: CartRequest):
     buyer_id = validate_session(body.session_id)
     stub = get_customer_stub()
     response = stub.AddToCart(customer_pb2.CartRequest(
-        session_id=body.session_id,
-        buyer_id=str(buyer_id),
-        item_id=body.item_id,
-        quantity=body.quantity
+        session_id=body.session_id, buyer_id=str(buyer_id),
+        item_id=body.item_id, quantity=body.quantity
     ))
     return parse(response)
 
@@ -158,10 +173,8 @@ async def remove_from_cart(body: CartRequest):
     buyer_id = validate_session(body.session_id)
     stub = get_customer_stub()
     response = stub.RemoveFromCart(customer_pb2.CartRequest(
-        session_id=body.session_id,
-        buyer_id=str(buyer_id),
-        item_id=body.item_id,
-        quantity=body.quantity
+        session_id=body.session_id, buyer_id=str(buyer_id),
+        item_id=body.item_id, quantity=body.quantity
     ))
     return parse(response)
 
@@ -170,8 +183,7 @@ async def save_cart(body: SaveCartRequest):
     buyer_id = validate_session(body.session_id)
     stub = get_customer_stub()
     response = stub.SaveCart(customer_pb2.SaveCartRequest(
-        session_id=body.session_id,
-        buyer_id=str(buyer_id)
+        session_id=body.session_id, buyer_id=str(buyer_id)
     ))
     return parse(response)
 
@@ -191,19 +203,15 @@ async def display_cart(session_id: str):
 
 @app.post("/buyer/provide_feedback")
 async def provide_feedback(body: FeedbackRequest):
-    buyer_id = validate_session(body.session_id)
-    # Update item feedback
+    validate_session(body.session_id)
     product_stub = get_product_stub()
     product_stub.ProvideItemFeedback(product_pb2.ItemFeedbackRequest(
-        item_id=body.item_id,
-        thumbs=body.thumbs
+        item_id=body.item_id, thumbs=body.thumbs
     ))
-    # Update seller feedback
     customer_stub = get_customer_stub()
     feedback_type = "thumbs_up" if body.thumbs == 1 else "thumbs_down"
     response = customer_stub.UpdateSellerFeedback(customer_pb2.FeedbackRequest(
-        seller_id=body.seller_id,
-        feedback_type=feedback_type
+        seller_id=body.seller_id, feedback_type=feedback_type
     ))
     return parse(response)
 
@@ -227,12 +235,9 @@ async def make_purchase(body: MakePurchaseRequest):
 
     # Step 1: Call SOAP financial service
     try:
-        soap_client = SOAPClient(f'http://{config.FINANCIAL_SERVICE_HOST}:{config.FINANCIAL_SERVICE_PORT}/?wsdl')
-        payment_approved = soap_client.service.ProcessPayment(
-            name=body.card_name,
-            card_number=body.card_number,
-            expiration_date=body.expiration_date,
-            security_code=body.security_code
+        payment_approved = call_financial_service(
+            body.card_name, body.card_number,
+            body.expiration_date, body.security_code
         )
     except Exception as e:
         return {'status': 'error', 'message': f'Payment service unavailable: {str(e)}', 'data': {}}
@@ -243,9 +248,7 @@ async def make_purchase(body: MakePurchaseRequest):
     # Step 2: Decrease item quantity in product DB
     product_stub = get_product_stub()
     purchase_response = product_stub.MakePurchase(product_pb2.PurchaseRequest(
-        item_id=body.item_id,
-        buyer_id=str(buyer_id),
-        quantity=body.quantity
+        item_id=body.item_id, buyer_id=str(buyer_id), quantity=body.quantity
     ))
 
     if purchase_response.status != 1:
@@ -256,17 +259,14 @@ async def make_purchase(body: MakePurchaseRequest):
     # Step 3: Record purchase in customer DB
     customer_stub = get_customer_stub()
     customer_stub.AddPurchase(customer_pb2.AddPurchaseRequest(
-        buyer_id=str(buyer_id),
-        item_id=body.item_id,
-        quantity=body.quantity,
-        price=0.0  # price not tracked in proto, can add if needed
+        buyer_id=str(buyer_id), item_id=body.item_id,
+        quantity=body.quantity, price=0.0
     ))
 
     # Step 4: Update seller items sold
     if seller_id:
         customer_stub.UpdateSellerItemsSold(customer_pb2.UpdateItemsSoldRequest(
-            seller_id=str(seller_id),
-            quantity=body.quantity
+            seller_id=str(seller_id), quantity=body.quantity
         ))
 
     return {'status': 'success', 'message': 'Purchase completed successfully', 'data': {}}

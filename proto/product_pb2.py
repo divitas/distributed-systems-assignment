@@ -24,7 +24,7 @@ _sym_db = _symbol_database.Default()
 
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\rproduct.proto\x12\x07product\"\x8e\x01\n\x13RegisterItemRequest\x12\x11\n\tseller_id\x18\x01 \x01(\t\x12\x0c\n\x04name\x18\x02 \x01(\t\x12\x10\n\x08\x63\x61tegory\x18\x03 \x01(\x05\x12\x10\n\x08keywords\x18\x04 \x03(\t\x12\x11\n\tcondition\x18\x05 \x01(\t\x12\r\n\x05price\x18\x06 \x01(\x02\x12\x10\n\x08quantity\x18\x07 \x01(\x05\"K\n\x12UpdatePriceRequest\x12\x0f\n\x07item_id\x18\x01 \x01(\t\x12\x11\n\tseller_id\x18\x02 \x01(\t\x12\x11\n\tnew_price\x18\x03 \x01(\x02\"W\n\x15UpdateQuantityRequest\x12\x0f\n\x07item_id\x18\x01 \x01(\t\x12\x11\n\tseller_id\x18\x02 \x01(\t\x12\x1a\n\x12quantity_to_remove\x18\x03 \x01(\x05\"\"\n\rSellerRequest\x12\x11\n\tseller_id\x18\x01 \x01(\t\"\x1e\n\x0bItemRequest\x12\x0f\n\x07item_id\x18\x01 \x01(\t\"3\n\rSearchRequest\x12\x10\n\x08\x63\x61tegory\x18\x01 \x01(\x05\x12\x10\n\x08keywords\x18\x02 \x03(\t\"F\n\x0fPurchaseRequest\x12\x0f\n\x07item_id\x18\x01 \x01(\t\x12\x10\n\x08\x62uyer_id\x18\x02 \x01(\t\x12\x10\n\x08quantity\x18\x03 \x01(\x05\"@\n\nDBResponse\x12\x0e\n\x06status\x18\x01 \x01(\x05\x12\x0f\n\x07message\x18\x02 \x01(\t\x12\x11\n\tjson_data\x18\x03 \x01(\t2\xce\x03\n\tProductDB\x12\x41\n\x0cRegisterItem\x12\x1c.product.RegisterItemRequest\x1a\x13.product.DBResponse\x12\x43\n\x0fUpdateItemPrice\x12\x1b.product.UpdatePriceRequest\x1a\x13.product.DBResponse\x12I\n\x12UpdateItemQuantity\x12\x1e.product.UpdateQuantityRequest\x1a\x13.product.DBResponse\x12=\n\x0eGetSellerItems\x12\x16.product.SellerRequest\x1a\x13.product.DBResponse\x12:\n\x0bSearchItems\x12\x16.product.SearchRequest\x1a\x13.product.DBResponse\x12\x34\n\x07GetItem\x12\x14.product.ItemRequest\x1a\x13.product.DBResponse\x12=\n\x0cMakePurchase\x12\x18.product.PurchaseRequest\x1a\x13.product.DBResponseb\x06proto3')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\rproduct.proto\x12\x07product\"\x8e\x01\n\x13RegisterItemRequest\x12\x11\n\tseller_id\x18\x01 \x01(\t\x12\x0c\n\x04name\x18\x02 \x01(\t\x12\x10\n\x08\x63\x61tegory\x18\x03 \x01(\x05\x12\x10\n\x08keywords\x18\x04 \x03(\t\x12\x11\n\tcondition\x18\x05 \x01(\t\x12\r\n\x05price\x18\x06 \x01(\x02\x12\x10\n\x08quantity\x18\x07 \x01(\x05\"\x1e\n\x0bItemRequest\x12\x0f\n\x07item_id\x18\x01 \x01(\t\"K\n\x12UpdatePriceRequest\x12\x0f\n\x07item_id\x18\x01 \x01(\t\x12\x11\n\tseller_id\x18\x02 \x01(\t\x12\x11\n\tnew_price\x18\x03 \x01(\x02\"W\n\x15UpdateQuantityRequest\x12\x0f\n\x07item_id\x18\x01 \x01(\t\x12\x11\n\tseller_id\x18\x02 \x01(\t\x12\x1a\n\x12quantity_to_remove\x18\x03 \x01(\x05\"\"\n\rSellerRequest\x12\x11\n\tseller_id\x18\x01 \x01(\t\"3\n\rSearchRequest\x12\x10\n\x08\x63\x61tegory\x18\x01 \x01(\x05\x12\x10\n\x08keywords\x18\x02 \x03(\t\"F\n\x0fPurchaseRequest\x12\x0f\n\x07item_id\x18\x01 \x01(\t\x12\x10\n\x08\x62uyer_id\x18\x02 \x01(\t\x12\x10\n\x08quantity\x18\x03 \x01(\x05\"6\n\x13ItemFeedbackRequest\x12\x0f\n\x07item_id\x18\x01 \x01(\t\x12\x0e\n\x06thumbs\x18\x02 \x01(\x05\"@\n\nDBResponse\x12\x0e\n\x06status\x18\x01 \x01(\x05\x12\x0f\n\x07message\x18\x02 \x01(\t\x12\x11\n\tjson_data\x18\x03 \x01(\t2\x98\x04\n\tProductDB\x12\x41\n\x0cRegisterItem\x12\x1c.product.RegisterItemRequest\x1a\x13.product.DBResponse\x12\x34\n\x07GetItem\x12\x14.product.ItemRequest\x1a\x13.product.DBResponse\x12\x43\n\x0fUpdateItemPrice\x12\x1b.product.UpdatePriceRequest\x1a\x13.product.DBResponse\x12I\n\x12UpdateItemQuantity\x12\x1e.product.UpdateQuantityRequest\x1a\x13.product.DBResponse\x12=\n\x0eGetSellerItems\x12\x16.product.SellerRequest\x1a\x13.product.DBResponse\x12:\n\x0bSearchItems\x12\x16.product.SearchRequest\x1a\x13.product.DBResponse\x12=\n\x0cMakePurchase\x12\x18.product.PurchaseRequest\x1a\x13.product.DBResponse\x12H\n\x13ProvideItemFeedback\x12\x1c.product.ItemFeedbackRequest\x1a\x13.product.DBResponseb\x06proto3')
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
@@ -33,20 +33,22 @@ if not _descriptor._USE_C_DESCRIPTORS:
   DESCRIPTOR._loaded_options = None
   _globals['_REGISTERITEMREQUEST']._serialized_start=27
   _globals['_REGISTERITEMREQUEST']._serialized_end=169
-  _globals['_UPDATEPRICEREQUEST']._serialized_start=171
-  _globals['_UPDATEPRICEREQUEST']._serialized_end=246
-  _globals['_UPDATEQUANTITYREQUEST']._serialized_start=248
-  _globals['_UPDATEQUANTITYREQUEST']._serialized_end=335
-  _globals['_SELLERREQUEST']._serialized_start=337
-  _globals['_SELLERREQUEST']._serialized_end=371
-  _globals['_ITEMREQUEST']._serialized_start=373
-  _globals['_ITEMREQUEST']._serialized_end=403
+  _globals['_ITEMREQUEST']._serialized_start=171
+  _globals['_ITEMREQUEST']._serialized_end=201
+  _globals['_UPDATEPRICEREQUEST']._serialized_start=203
+  _globals['_UPDATEPRICEREQUEST']._serialized_end=278
+  _globals['_UPDATEQUANTITYREQUEST']._serialized_start=280
+  _globals['_UPDATEQUANTITYREQUEST']._serialized_end=367
+  _globals['_SELLERREQUEST']._serialized_start=369
+  _globals['_SELLERREQUEST']._serialized_end=403
   _globals['_SEARCHREQUEST']._serialized_start=405
   _globals['_SEARCHREQUEST']._serialized_end=456
   _globals['_PURCHASEREQUEST']._serialized_start=458
   _globals['_PURCHASEREQUEST']._serialized_end=528
-  _globals['_DBRESPONSE']._serialized_start=530
-  _globals['_DBRESPONSE']._serialized_end=594
-  _globals['_PRODUCTDB']._serialized_start=597
-  _globals['_PRODUCTDB']._serialized_end=1059
+  _globals['_ITEMFEEDBACKREQUEST']._serialized_start=530
+  _globals['_ITEMFEEDBACKREQUEST']._serialized_end=584
+  _globals['_DBRESPONSE']._serialized_start=586
+  _globals['_DBRESPONSE']._serialized_end=650
+  _globals['_PRODUCTDB']._serialized_start=653
+  _globals['_PRODUCTDB']._serialized_end=1189
 # @@protoc_insertion_point(module_scope)

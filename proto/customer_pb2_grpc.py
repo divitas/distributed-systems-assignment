@@ -54,6 +54,26 @@ class CustomerDBStub(object):
                 request_serializer=customer__pb2.SessionRequest.SerializeToString,
                 response_deserializer=customer__pb2.DBResponse.FromString,
                 _registered_method=True)
+        self.RestoreSessionSeller = channel.unary_unary(
+                '/customer.CustomerDB/RestoreSessionSeller',
+                request_serializer=customer__pb2.SessionRequest.SerializeToString,
+                response_deserializer=customer__pb2.DBResponse.FromString,
+                _registered_method=True)
+        self.GetSellerRating = channel.unary_unary(
+                '/customer.CustomerDB/GetSellerRating',
+                request_serializer=customer__pb2.SellerRequest.SerializeToString,
+                response_deserializer=customer__pb2.DBResponse.FromString,
+                _registered_method=True)
+        self.UpdateSellerFeedback = channel.unary_unary(
+                '/customer.CustomerDB/UpdateSellerFeedback',
+                request_serializer=customer__pb2.FeedbackRequest.SerializeToString,
+                response_deserializer=customer__pb2.DBResponse.FromString,
+                _registered_method=True)
+        self.UpdateSellerItemsSold = channel.unary_unary(
+                '/customer.CustomerDB/UpdateSellerItemsSold',
+                request_serializer=customer__pb2.UpdateItemsSoldRequest.SerializeToString,
+                response_deserializer=customer__pb2.DBResponse.FromString,
+                _registered_method=True)
         self.CreateBuyer = channel.unary_unary(
                 '/customer.CustomerDB/CreateBuyer',
                 request_serializer=customer__pb2.CreateBuyerRequest.SerializeToString,
@@ -74,14 +94,9 @@ class CustomerDBStub(object):
                 request_serializer=customer__pb2.SessionRequest.SerializeToString,
                 response_deserializer=customer__pb2.DBResponse.FromString,
                 _registered_method=True)
-        self.GetSellerRating = channel.unary_unary(
-                '/customer.CustomerDB/GetSellerRating',
-                request_serializer=customer__pb2.SellerRequest.SerializeToString,
-                response_deserializer=customer__pb2.DBResponse.FromString,
-                _registered_method=True)
-        self.ProvideFeedback = channel.unary_unary(
-                '/customer.CustomerDB/ProvideFeedback',
-                request_serializer=customer__pb2.FeedbackRequest.SerializeToString,
+        self.RestoreSessionBuyer = channel.unary_unary(
+                '/customer.CustomerDB/RestoreSessionBuyer',
+                request_serializer=customer__pb2.SessionRequest.SerializeToString,
                 response_deserializer=customer__pb2.DBResponse.FromString,
                 _registered_method=True)
         self.GetBuyerPurchases = channel.unary_unary(
@@ -111,7 +126,7 @@ class CustomerDBStub(object):
                 _registered_method=True)
         self.SaveCart = channel.unary_unary(
                 '/customer.CustomerDB/SaveCart',
-                request_serializer=customer__pb2.SessionRequest.SerializeToString,
+                request_serializer=customer__pb2.SaveCartRequest.SerializeToString,
                 response_deserializer=customer__pb2.DBResponse.FromString,
                 _registered_method=True)
         self.ClearCart = channel.unary_unary(
@@ -148,6 +163,30 @@ class CustomerDBServicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
+    def RestoreSessionSeller(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def GetSellerRating(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def UpdateSellerFeedback(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def UpdateSellerItemsSold(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
     def CreateBuyer(self, request, context):
         """Missing associated documentation comment in .proto file."""
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
@@ -172,13 +211,7 @@ class CustomerDBServicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
-    def GetSellerRating(self, request, context):
-        """Missing associated documentation comment in .proto file."""
-        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
-        context.set_details('Method not implemented!')
-        raise NotImplementedError('Method not implemented!')
-
-    def ProvideFeedback(self, request, context):
+    def RestoreSessionBuyer(self, request, context):
         """Missing associated documentation comment in .proto file."""
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
@@ -249,6 +282,26 @@ def add_CustomerDBServicer_to_server(servicer, server):
                     request_deserializer=customer__pb2.SessionRequest.FromString,
                     response_serializer=customer__pb2.DBResponse.SerializeToString,
             ),
+            'RestoreSessionSeller': grpc.unary_unary_rpc_method_handler(
+                    servicer.RestoreSessionSeller,
+                    request_deserializer=customer__pb2.SessionRequest.FromString,
+                    response_serializer=customer__pb2.DBResponse.SerializeToString,
+            ),
+            'GetSellerRating': grpc.unary_unary_rpc_method_handler(
+                    servicer.GetSellerRating,
+                    request_deserializer=customer__pb2.SellerRequest.FromString,
+                    response_serializer=customer__pb2.DBResponse.SerializeToString,
+            ),
+            'UpdateSellerFeedback': grpc.unary_unary_rpc_method_handler(
+                    servicer.UpdateSellerFeedback,
+                    request_deserializer=customer__pb2.FeedbackRequest.FromString,
+                    response_serializer=customer__pb2.DBResponse.SerializeToString,
+            ),
+            'UpdateSellerItemsSold': grpc.unary_unary_rpc_method_handler(
+                    servicer.UpdateSellerItemsSold,
+                    request_deserializer=customer__pb2.UpdateItemsSoldRequest.FromString,
+                    response_serializer=customer__pb2.DBResponse.SerializeToString,
+            ),
             'CreateBuyer': grpc.unary_unary_rpc_method_handler(
                     servicer.CreateBuyer,
                     request_deserializer=customer__pb2.CreateBuyerRequest.FromString,
@@ -269,14 +322,9 @@ def add_CustomerDBServicer_to_server(servicer, server):
                     request_deserializer=customer__pb2.SessionRequest.FromString,
                     response_serializer=customer__pb2.DBResponse.SerializeToString,
             ),
-            'GetSellerRating': grpc.unary_unary_rpc_method_handler(
-                    servicer.GetSellerRating,
-                    request_deserializer=customer__pb2.SellerRequest.FromString,
-                    response_serializer=customer__pb2.DBResponse.SerializeToString,
-            ),
-            'ProvideFeedback': grpc.unary_unary_rpc_method_handler(
-                    servicer.ProvideFeedback,
-                    request_deserializer=customer__pb2.FeedbackRequest.FromString,
+            'RestoreSessionBuyer': grpc.unary_unary_rpc_method_handler(
+                    servicer.RestoreSessionBuyer,
+                    request_deserializer=customer__pb2.SessionRequest.FromString,
                     response_serializer=customer__pb2.DBResponse.SerializeToString,
             ),
             'GetBuyerPurchases': grpc.unary_unary_rpc_method_handler(
@@ -306,7 +354,7 @@ def add_CustomerDBServicer_to_server(servicer, server):
             ),
             'SaveCart': grpc.unary_unary_rpc_method_handler(
                     servicer.SaveCart,
-                    request_deserializer=customer__pb2.SessionRequest.FromString,
+                    request_deserializer=customer__pb2.SaveCartRequest.FromString,
                     response_serializer=customer__pb2.DBResponse.SerializeToString,
             ),
             'ClearCart': grpc.unary_unary_rpc_method_handler(
@@ -434,6 +482,114 @@ class CustomerDB(object):
             _registered_method=True)
 
     @staticmethod
+    def RestoreSessionSeller(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/customer.CustomerDB/RestoreSessionSeller',
+            customer__pb2.SessionRequest.SerializeToString,
+            customer__pb2.DBResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def GetSellerRating(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/customer.CustomerDB/GetSellerRating',
+            customer__pb2.SellerRequest.SerializeToString,
+            customer__pb2.DBResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def UpdateSellerFeedback(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/customer.CustomerDB/UpdateSellerFeedback',
+            customer__pb2.FeedbackRequest.SerializeToString,
+            customer__pb2.DBResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def UpdateSellerItemsSold(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/customer.CustomerDB/UpdateSellerItemsSold',
+            customer__pb2.UpdateItemsSoldRequest.SerializeToString,
+            customer__pb2.DBResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
     def CreateBuyer(request,
             target,
             options=(),
@@ -542,7 +698,7 @@ class CustomerDB(object):
             _registered_method=True)
 
     @staticmethod
-    def GetSellerRating(request,
+    def RestoreSessionBuyer(request,
             target,
             options=(),
             channel_credentials=None,
@@ -555,35 +711,8 @@ class CustomerDB(object):
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/customer.CustomerDB/GetSellerRating',
-            customer__pb2.SellerRequest.SerializeToString,
-            customer__pb2.DBResponse.FromString,
-            options,
-            channel_credentials,
-            insecure,
-            call_credentials,
-            compression,
-            wait_for_ready,
-            timeout,
-            metadata,
-            _registered_method=True)
-
-    @staticmethod
-    def ProvideFeedback(request,
-            target,
-            options=(),
-            channel_credentials=None,
-            call_credentials=None,
-            insecure=False,
-            compression=None,
-            wait_for_ready=None,
-            timeout=None,
-            metadata=None):
-        return grpc.experimental.unary_unary(
-            request,
-            target,
-            '/customer.CustomerDB/ProvideFeedback',
-            customer__pb2.FeedbackRequest.SerializeToString,
+            '/customer.CustomerDB/RestoreSessionBuyer',
+            customer__pb2.SessionRequest.SerializeToString,
             customer__pb2.DBResponse.FromString,
             options,
             channel_credentials,
@@ -745,7 +874,7 @@ class CustomerDB(object):
             request,
             target,
             '/customer.CustomerDB/SaveCart',
-            customer__pb2.SessionRequest.SerializeToString,
+            customer__pb2.SaveCartRequest.SerializeToString,
             customer__pb2.DBResponse.FromString,
             options,
             channel_credentials,

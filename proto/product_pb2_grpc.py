@@ -39,6 +39,11 @@ class ProductDBStub(object):
                 request_serializer=product__pb2.RegisterItemRequest.SerializeToString,
                 response_deserializer=product__pb2.DBResponse.FromString,
                 _registered_method=True)
+        self.GetItem = channel.unary_unary(
+                '/product.ProductDB/GetItem',
+                request_serializer=product__pb2.ItemRequest.SerializeToString,
+                response_deserializer=product__pb2.DBResponse.FromString,
+                _registered_method=True)
         self.UpdateItemPrice = channel.unary_unary(
                 '/product.ProductDB/UpdateItemPrice',
                 request_serializer=product__pb2.UpdatePriceRequest.SerializeToString,
@@ -59,14 +64,14 @@ class ProductDBStub(object):
                 request_serializer=product__pb2.SearchRequest.SerializeToString,
                 response_deserializer=product__pb2.DBResponse.FromString,
                 _registered_method=True)
-        self.GetItem = channel.unary_unary(
-                '/product.ProductDB/GetItem',
-                request_serializer=product__pb2.ItemRequest.SerializeToString,
-                response_deserializer=product__pb2.DBResponse.FromString,
-                _registered_method=True)
         self.MakePurchase = channel.unary_unary(
                 '/product.ProductDB/MakePurchase',
                 request_serializer=product__pb2.PurchaseRequest.SerializeToString,
+                response_deserializer=product__pb2.DBResponse.FromString,
+                _registered_method=True)
+        self.ProvideItemFeedback = channel.unary_unary(
+                '/product.ProductDB/ProvideItemFeedback',
+                request_serializer=product__pb2.ItemFeedbackRequest.SerializeToString,
                 response_deserializer=product__pb2.DBResponse.FromString,
                 _registered_method=True)
 
@@ -75,6 +80,12 @@ class ProductDBServicer(object):
     """Missing associated documentation comment in .proto file."""
 
     def RegisterItem(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def GetItem(self, request, context):
         """Missing associated documentation comment in .proto file."""
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
@@ -104,13 +115,13 @@ class ProductDBServicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
-    def GetItem(self, request, context):
+    def MakePurchase(self, request, context):
         """Missing associated documentation comment in .proto file."""
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
-    def MakePurchase(self, request, context):
+    def ProvideItemFeedback(self, request, context):
         """Missing associated documentation comment in .proto file."""
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
@@ -122,6 +133,11 @@ def add_ProductDBServicer_to_server(servicer, server):
             'RegisterItem': grpc.unary_unary_rpc_method_handler(
                     servicer.RegisterItem,
                     request_deserializer=product__pb2.RegisterItemRequest.FromString,
+                    response_serializer=product__pb2.DBResponse.SerializeToString,
+            ),
+            'GetItem': grpc.unary_unary_rpc_method_handler(
+                    servicer.GetItem,
+                    request_deserializer=product__pb2.ItemRequest.FromString,
                     response_serializer=product__pb2.DBResponse.SerializeToString,
             ),
             'UpdateItemPrice': grpc.unary_unary_rpc_method_handler(
@@ -144,14 +160,14 @@ def add_ProductDBServicer_to_server(servicer, server):
                     request_deserializer=product__pb2.SearchRequest.FromString,
                     response_serializer=product__pb2.DBResponse.SerializeToString,
             ),
-            'GetItem': grpc.unary_unary_rpc_method_handler(
-                    servicer.GetItem,
-                    request_deserializer=product__pb2.ItemRequest.FromString,
-                    response_serializer=product__pb2.DBResponse.SerializeToString,
-            ),
             'MakePurchase': grpc.unary_unary_rpc_method_handler(
                     servicer.MakePurchase,
                     request_deserializer=product__pb2.PurchaseRequest.FromString,
+                    response_serializer=product__pb2.DBResponse.SerializeToString,
+            ),
+            'ProvideItemFeedback': grpc.unary_unary_rpc_method_handler(
+                    servicer.ProvideItemFeedback,
+                    request_deserializer=product__pb2.ItemFeedbackRequest.FromString,
                     response_serializer=product__pb2.DBResponse.SerializeToString,
             ),
     }
@@ -181,6 +197,33 @@ class ProductDB(object):
             target,
             '/product.ProductDB/RegisterItem',
             product__pb2.RegisterItemRequest.SerializeToString,
+            product__pb2.DBResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def GetItem(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/product.ProductDB/GetItem',
+            product__pb2.ItemRequest.SerializeToString,
             product__pb2.DBResponse.FromString,
             options,
             channel_credentials,
@@ -301,33 +344,6 @@ class ProductDB(object):
             _registered_method=True)
 
     @staticmethod
-    def GetItem(request,
-            target,
-            options=(),
-            channel_credentials=None,
-            call_credentials=None,
-            insecure=False,
-            compression=None,
-            wait_for_ready=None,
-            timeout=None,
-            metadata=None):
-        return grpc.experimental.unary_unary(
-            request,
-            target,
-            '/product.ProductDB/GetItem',
-            product__pb2.ItemRequest.SerializeToString,
-            product__pb2.DBResponse.FromString,
-            options,
-            channel_credentials,
-            insecure,
-            call_credentials,
-            compression,
-            wait_for_ready,
-            timeout,
-            metadata,
-            _registered_method=True)
-
-    @staticmethod
     def MakePurchase(request,
             target,
             options=(),
@@ -343,6 +359,33 @@ class ProductDB(object):
             target,
             '/product.ProductDB/MakePurchase',
             product__pb2.PurchaseRequest.SerializeToString,
+            product__pb2.DBResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def ProvideItemFeedback(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/product.ProductDB/ProvideItemFeedback',
+            product__pb2.ItemFeedbackRequest.SerializeToString,
             product__pb2.DBResponse.FromString,
             options,
             channel_credentials,

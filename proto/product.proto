@@ -3,22 +3,24 @@ package product;
 
 service ProductDB {
     rpc RegisterItem(RegisterItemRequest) returns (DBResponse);
+    rpc GetItem(ItemRequest) returns (DBResponse);
     rpc UpdateItemPrice(UpdatePriceRequest) returns (DBResponse);
     rpc UpdateItemQuantity(UpdateQuantityRequest) returns (DBResponse);
     rpc GetSellerItems(SellerRequest) returns (DBResponse);
     rpc SearchItems(SearchRequest) returns (DBResponse);
-    rpc GetItem(ItemRequest) returns (DBResponse);
     rpc MakePurchase(PurchaseRequest) returns (DBResponse);
+    rpc ProvideItemFeedback(ItemFeedbackRequest) returns (DBResponse);
 }
 
 message RegisterItemRequest {
     string seller_id = 1; string name = 2; int32 category = 3;
     repeated string keywords = 4; string condition = 5; float price = 6; int32 quantity = 7;
 }
-message UpdatePriceRequest { string item_id = 1; string seller_id = 2; float new_price = 3; }
+message ItemRequest           { string item_id = 1; }
+message UpdatePriceRequest    { string item_id = 1; string seller_id = 2; float new_price = 3; }
 message UpdateQuantityRequest { string item_id = 1; string seller_id = 2; int32 quantity_to_remove = 3; }
-message SellerRequest { string seller_id = 1; }
-message ItemRequest { string item_id = 1; }
-message SearchRequest { int32 category = 1; repeated string keywords = 2; }
-message PurchaseRequest { string item_id = 1; string buyer_id = 2; int32 quantity = 3; }
-message DBResponse { int32 status = 1; string message = 2; string json_data = 3; }
+message SellerRequest         { string seller_id = 1; }
+message SearchRequest         { int32 category = 1; repeated string keywords = 2; }
+message PurchaseRequest       { string item_id = 1; string buyer_id = 2; int32 quantity = 3; }
+message ItemFeedbackRequest   { string item_id = 1; int32 thumbs = 2; }
+message DBResponse            { int32 status = 1; string message = 2; string json_data = 3; }

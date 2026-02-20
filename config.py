@@ -6,19 +6,19 @@ Modify these settings to match your deployment environment
 # ============================================================================
 # DATABASE SERVER CONFIGURATIONS
 # ============================================================================
-CUSTOMER_DB_HOST = "10.224.78.211" # vm1 "localhost"
+CUSTOMER_DB_HOST = "10.224.76.209" # vm1 "localhost"
 CUSTOMER_DB_PORT = 5001
 
-PRODUCT_DB_HOST = "10.224.76.57" # vm2 "localhost"
+PRODUCT_DB_HOST = "10.224.79.164" # vm2 "localhost"
 PRODUCT_DB_PORT = 5002
 
 # ============================================================================
 # FRONTEND SERVER CONFIGURATIONS
 # ============================================================================
-BUYER_FRONTEND_HOST = "10.224.79.148" # vm3 "localhost"
+BUYER_FRONTEND_HOST = "10.224.78.247" # vm3 "localhost"
 BUYER_FRONTEND_PORT = 6001
 
-SELLER_FRONTEND_HOST = "10.224.79.250" # vm4 "localhost"
+SELLER_FRONTEND_HOST = "10.224.79.170" # vm4 "localhost"
 SELLER_FRONTEND_PORT = 6002
 
 # ============================================================================

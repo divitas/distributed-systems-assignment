@@ -11,7 +11,7 @@ This is PA2, built on top of PA1. The system is an online marketplace with selle
 
 ## Development Setup
 
-### Mac (Local Machine)
+### Mac (Local Machine) - setup for ssh from mac to vms is at the bottom!!
 - Where all code is written and edited
 - Where proto stubs are generated using `protoc`
 - Connected to all 5 VMs via SSH
@@ -247,3 +247,63 @@ Then on all VMs: `git pull`
 | Frontend ↔ Database | Raw TCP sockets + JSON | gRPC |
 | MakePurchase | Not implemented | Implemented with SOAP payment |
 | Deployment | Single machine or VMs | Separate cloud VMs required |
+
+---
+
+## SSH Setup (Mac → VMs)
+
+### Step 1: Generate SSH key on Mac (if you don't have one)
+```bash
+ssh-keygen -t rsa -b 4096 -C "your_email@example.com"
+# Press enter to accept defaults
+# Key saved to ~/.ssh/id_rsa and ~/.ssh/id_rsa.pub
+```
+
+### Step 2: Copy your public key to each VM
+```bash
+# Replace USER and VM_IP with your actual values
+ssh-copy-id student@10.224.76.209   # VM1
+ssh-copy-id student@10.224.79.164   # VM2
+ssh-copy-id student@10.224.78.247   # VM3
+ssh-copy-id student@10.224.79.170   # VM4
+ssh-copy-id student@10.224.77.206   # VM5
+```
+This copies your Mac's public key into `~/.ssh/authorized_keys` on each VM so you don't need a password.
+
+### Step 3: Configure SSH shortcuts on Mac
+Edit `~/.ssh/config` on your Mac and add:
+```
+Host vm1
+    HostName 10.224.76.209
+    User student
+
+Host vm2
+    HostName 10.224.79.164
+    User student
+
+Host vm3
+    HostName 10.224.78.247
+    User student
+
+Host vm4
+    HostName 10.224.79.170
+    User student
+
+Host vm5
+    HostName 10.224.77.206
+    User student
+```
+
+Now you can SSH into any VM with just:
+```bash
+ssh vm1
+ssh vm3
+# etc.
+```
+
+### Step 4: Connect via VS Code Remote SSH
+1. Install the **Remote - SSH** extension in VS Code
+2. Click the green `><` button in the bottom-left corner
+3. Select **Connect to Host**
+4. Type `vm1`, `vm3`, etc. (uses your SSH config shortcuts)
+5. You now have a full editor, file explorer, and terminal on that VM

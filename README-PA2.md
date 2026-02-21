@@ -333,8 +333,6 @@ Each client performs approximately 1000 operations total across all runs.
 
 You can find the performance test results here: [performance_test.log](performance_log_20260220_214136.log)
 
-### Analysis
-
 ## Performance Comparison: PA1 (TCP) vs PA2 (REST + gRPC)
 
 ### Results

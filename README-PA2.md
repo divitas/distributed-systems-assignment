@@ -331,7 +331,7 @@ Each client performs approximately 1000 operations total across all runs.
 
 ## Performance Report and Analysis
 
-You can find the performance test results here: [performance_test.log](tests/logs/performance_test_20260130_191442.log)
+You can find the performance test results here: [performance_test.log](performance_log_20260220_214136.log)
 
 ### Analysis
 
@@ -348,17 +348,12 @@ You can find the performance test results here: [performance_test.log](tests/log
 ### Analysis
 
 **Scenario 1 (1 Seller + 1 Buyer):**
-PA1 outperforms PA2 in the single-client case. This is expected because raw TCP sockets have minimal overhead — just a direct socket connection with JSON payloads. REST and gRPC introduce additional overhead from HTTP headers, protocol negotiation, protobuf serialization/deserialization, and the FastAPI framework layer. With only one client and no contention, this extra overhead is not offset by any concurrency benefits.
+PA1 outperforms PA2 in the single-client case. This is expected because raw TCP sockets have minimal overhead, just a direct socket connection with JSON payloads. REST and gRPC introduce additional overhead from HTTP headers, protocol negotiation, protobuf serialization/deserialization, and the FastAPI framework layer. With only one client and no contention, this extra overhead is not offset by any concurrency benefits.
 
 **Scenario 2 (10 Sellers + 10 Buyers):**
-PA2 significantly outperforms PA1 with moderate concurrency. gRPC uses HTTP/2, which supports multiplexing — multiple requests can be sent over a single connection simultaneously without head-of-line blocking. FastAPI's async request handling allows the buyer and seller frontends to process multiple requests concurrently without blocking threads. In contrast, PA1's raw TCP approach likely requires a new connection per request or sequential processing, creating a bottleneck under concurrent load.
+PA2 significantly outperforms PA1 with moderate concurrency. gRPC uses HTTP/2, which supports multiplexing; multiple requests can be sent over a single connection simultaneously without head-of-line blocking. FastAPI's async request handling allows the buyer and seller frontends to process multiple requests concurrently without blocking threads.
 
 **Scenario 3 (100 Sellers + 100 Buyers):**
-PA2 continues to outperform PA1 at high concurrency, with a 26% improvement in response time and 8% higher throughput. With 200 concurrent clients, PA1 struggles with connection management — opening, maintaining, and closing 200 individual TCP connections creates significant overhead. gRPC's persistent connections and HTTP/2 multiplexing handle this much more efficiently. However, the throughput improvement is smaller than Scenario 2 because both systems hit resource limits (database contention, CPU, SQLite locks) at this scale, which become the dominant bottleneck regardless of the communication protocol.
+PA2 continues to outperform PA1 at high concurrency, with a 26% improvement in response time and 8% higher throughput. With 200 concurrent clients, PA1 struggles with connection management, opening, maintaining, and closing 200 individual TCP connections, which creates significant overhead. gRPC's persistent connections and HTTP/2 multiplexing handle this much more efficiently. However, the throughput improvement is smaller than Scenario 2 because both systems hit resource limits (database contention, CPU, SQLite locks) at this scale, which become the dominant bottleneck regardless of the communication protocol.
 
-### Key Takeaways
-
-- **Low concurrency:** Raw TCP has lower latency due to less protocol overhead. REST/gRPC add a small fixed cost per request.
-- **Moderate to high concurrency:** REST + gRPC scales significantly better due to HTTP/2 multiplexing, connection reuse, efficient binary serialization (protobuf), and async request handling.
-- **At very high concurrency:** The communication protocol becomes less of a factor as backend resources (database, CPU) become the bottleneck. Both architectures converge in throughput.
-- **Overall:** The move from raw TCP to REST + gRPC trades a small amount of single-client performance for significantly better scalability under concurrent load, which is the more realistic production scenario.
+**Overall:** The move from raw TCP to REST + gRPC trades a small amount of single-client performance for significantly better scalability under concurrent load, which is the more realistic production scenario.

@@ -335,30 +335,30 @@ You can find the performance test results here: [performance_test.log](tests/log
 
 ### Analysis
 
-**1 Seller and 1 Buyer**
-With only one seller and one buyer, the system demonstrates basic performance. We think the response times are low because of minimal network congestion, also the database can handle sequential requests efficiently and no queueing delays occur at frontend servers
+## Performance Comparison: PA1 (TCP) vs PA2 (REST + gRPC)
 
-The throughput is limited primarily by:
-- Database query execution time
-- Sequential nature of operations
+### Results
 
-**10 Sellers and 10 Buyers**
-With 10 sellers and 10 buyers we can see higher response times and lower throughput as the network has more congestion/traffic which in turn facilitates database connection pool utilization.
+| Scenario | Clients | PA1 Avg RT (ms) | PA2 Avg RT (ms) | RT Improvement | PA1 Throughput (ops/s) | PA2 Throughput (ops/s) | Throughput Improvement |
+|----------|---------|-----------------|-----------------|----------------|----------------------|----------------------|----------------------|
+| 1 | 1S + 1B | 35.10 | 48.64 | -38.6% (slower) | 50.99 | 34.75 | -31.9% (lower) |
+| 2 | 10S + 10B | 117.65 | 79.78 | +32.2% (faster) | 145.41 | 184.01 | +26.5% (higher) |
+| 3 | 100S + 100B | 864.96 | 640.93 | +25.9% (faster) | 152.77 | 164.92 | +8.0% (higher) |
 
-Throughput increases when we added more buyers and sellers because the system can do more work in parallel, keeping resources busy instead of idle and since our architecture had:
-- Parallel processing of multiple requests
-- Better utilization of multi-threaded architecture
-- Database can handle concurrent queries
+### Analysis
 
-**100 Sellers and 100 Buyers**
-With 100 concurrent sellers and buyers (200 total clients), the system experiences maximum load causing a degrade in performance (response time).
-Response time increases significantly because:
-- High contention for database connections
-- Thread pool exhaustion causing queueing
-- SQLite write serialization (single writer)
-- Increased lock wait times
+**Scenario 1 (1 Seller + 1 Buyer):**
+PA1 outperforms PA2 in the single-client case. This is expected because raw TCP sockets have minimal overhead — just a direct socket connection with JSON payloads. REST and gRPC introduce additional overhead from HTTP headers, protocol negotiation, protobuf serialization/deserialization, and the FastAPI framework layer. With only one client and no contention, this extra overhead is not offset by any concurrency benefits.
 
-Throughput plateaus because the system hits a bottleneck where a limited resource is fully saturated, so adding more clients only increases waiting, not completed work. More precisely due to:
-- Resource saturation (CPU, memory, I/O)
-- Lock contention overhead
-- Context switching overhead with many threads
+**Scenario 2 (10 Sellers + 10 Buyers):**
+PA2 significantly outperforms PA1 with moderate concurrency. gRPC uses HTTP/2, which supports multiplexing — multiple requests can be sent over a single connection simultaneously without head-of-line blocking. FastAPI's async request handling allows the buyer and seller frontends to process multiple requests concurrently without blocking threads. In contrast, PA1's raw TCP approach likely requires a new connection per request or sequential processing, creating a bottleneck under concurrent load.
+
+**Scenario 3 (100 Sellers + 100 Buyers):**
+PA2 continues to outperform PA1 at high concurrency, with a 26% improvement in response time and 8% higher throughput. With 200 concurrent clients, PA1 struggles with connection management — opening, maintaining, and closing 200 individual TCP connections creates significant overhead. gRPC's persistent connections and HTTP/2 multiplexing handle this much more efficiently. However, the throughput improvement is smaller than Scenario 2 because both systems hit resource limits (database contention, CPU, SQLite locks) at this scale, which become the dominant bottleneck regardless of the communication protocol.
+
+### Key Takeaways
+
+- **Low concurrency:** Raw TCP has lower latency due to less protocol overhead. REST/gRPC add a small fixed cost per request.
+- **Moderate to high concurrency:** REST + gRPC scales significantly better due to HTTP/2 multiplexing, connection reuse, efficient binary serialization (protobuf), and async request handling.
+- **At very high concurrency:** The communication protocol becomes less of a factor as backend resources (database, CPU) become the bottleneck. Both architectures converge in throughput.
+- **Overall:** The move from raw TCP to REST + gRPC trades a small amount of single-client performance for significantly better scalability under concurrent load, which is the more realistic production scenario.

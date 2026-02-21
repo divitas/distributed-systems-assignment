@@ -307,3 +307,58 @@ ssh vm3
 3. Select **Connect to Host**
 4. Type `vm1`, `vm3`, etc. (uses your SSH config shortcuts)
 5. You now have a full editor, file explorer, and terminal on that VM
+
+
+## Running Performance Tests
+
+The performance test script measures response time and throughput for three scenarios:
+
+```bash
+python3 tests/performance_test.py
+```
+
+This will run:
+- **Scenario 1**: 1 seller + 1 buyer (10 runs, 100 operations each)
+- **Scenario 2**: 10 sellers + 10 buyers (10 runs, 50 operations each)
+- **Scenario 3**: 100 sellers + 100 buyers (10 runs, 5 operations each)
+
+Each client performs approximately 1000 operations total across all runs.
+
+### Performance Metrics
+
+- **Average Response Time**: Time from API call to response receipt
+- **Throughput**: Operations completed per second
+
+## Performance Report and Analysis
+
+You can find the performance test results here: [performance_test.log](tests/logs/performance_test_20260130_191442.log)
+
+### Analysis
+
+## Performance Comparison: PA1 (TCP) vs PA2 (REST + gRPC)
+
+### Results
+
+| Scenario | Clients | PA1 Avg RT (ms) | PA2 Avg RT (ms) | RT Improvement | PA1 Throughput (ops/s) | PA2 Throughput (ops/s) | Throughput Improvement |
+|----------|---------|-----------------|-----------------|----------------|----------------------|----------------------|----------------------|
+| 1 | 1S + 1B | 35.10 | 48.64 | -38.6% (slower) | 50.99 | 34.75 | -31.9% (lower) |
+| 2 | 10S + 10B | 117.65 | 79.78 | +32.2% (faster) | 145.41 | 184.01 | +26.5% (higher) |
+| 3 | 100S + 100B | 864.96 | 640.93 | +25.9% (faster) | 152.77 | 164.92 | +8.0% (higher) |
+
+### Analysis
+
+**Scenario 1 (1 Seller + 1 Buyer):**
+PA1 outperforms PA2 in the single-client case. This is expected because raw TCP sockets have minimal overhead — just a direct socket connection with JSON payloads. REST and gRPC introduce additional overhead from HTTP headers, protocol negotiation, protobuf serialization/deserialization, and the FastAPI framework layer. With only one client and no contention, this extra overhead is not offset by any concurrency benefits.
+
+**Scenario 2 (10 Sellers + 10 Buyers):**
+PA2 significantly outperforms PA1 with moderate concurrency. gRPC uses HTTP/2, which supports multiplexing — multiple requests can be sent over a single connection simultaneously without head-of-line blocking. FastAPI's async request handling allows the buyer and seller frontends to process multiple requests concurrently without blocking threads. In contrast, PA1's raw TCP approach likely requires a new connection per request or sequential processing, creating a bottleneck under concurrent load.
+
+**Scenario 3 (100 Sellers + 100 Buyers):**
+PA2 continues to outperform PA1 at high concurrency, with a 26% improvement in response time and 8% higher throughput. With 200 concurrent clients, PA1 struggles with connection management — opening, maintaining, and closing 200 individual TCP connections creates significant overhead. gRPC's persistent connections and HTTP/2 multiplexing handle this much more efficiently. However, the throughput improvement is smaller than Scenario 2 because both systems hit resource limits (database contention, CPU, SQLite locks) at this scale, which become the dominant bottleneck regardless of the communication protocol.
+
+### Key Takeaways
+
+- **Low concurrency:** Raw TCP has lower latency due to less protocol overhead. REST/gRPC add a small fixed cost per request.
+- **Moderate to high concurrency:** REST + gRPC scales significantly better due to HTTP/2 multiplexing, connection reuse, efficient binary serialization (protobuf), and async request handling.
+- **At very high concurrency:** The communication protocol becomes less of a factor as backend resources (database, CPU) become the bottleneck. Both architectures converge in throughput.
+- **Overall:** The move from raw TCP to REST + gRPC trades a small amount of single-client performance for significantly better scalability under concurrent load, which is the more realistic production scenario.

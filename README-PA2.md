@@ -307,3 +307,58 @@ ssh vm3
 3. Select **Connect to Host**
 4. Type `vm1`, `vm3`, etc. (uses your SSH config shortcuts)
 5. You now have a full editor, file explorer, and terminal on that VM
+
+
+## Running Performance Tests
+
+The performance test script measures response time and throughput for three scenarios:
+
+```bash
+python3 tests/performance_test.py
+```
+
+This will run:
+- **Scenario 1**: 1 seller + 1 buyer (10 runs, 100 operations each)
+- **Scenario 2**: 10 sellers + 10 buyers (10 runs, 50 operations each)
+- **Scenario 3**: 100 sellers + 100 buyers (10 runs, 5 operations each)
+
+Each client performs approximately 1000 operations total across all runs.
+
+### Performance Metrics
+
+- **Average Response Time**: Time from API call to response receipt
+- **Throughput**: Operations completed per second
+
+## Performance Report and Analysis
+
+You can find the performance test results here: [performance_test.log](tests/logs/performance_test_20260130_191442.log)
+
+### Analysis
+
+**1 Seller and 1 Buyer**
+With only one seller and one buyer, the system demonstrates basic performance. We think the response times are low because of minimal network congestion, also the database can handle sequential requests efficiently and no queueing delays occur at frontend servers
+
+The throughput is limited primarily by:
+- Database query execution time
+- Sequential nature of operations
+
+**10 Sellers and 10 Buyers**
+With 10 sellers and 10 buyers we can see higher response times and lower throughput as the network has more congestion/traffic which in turn facilitates database connection pool utilization.
+
+Throughput increases when we added more buyers and sellers because the system can do more work in parallel, keeping resources busy instead of idle and since our architecture had:
+- Parallel processing of multiple requests
+- Better utilization of multi-threaded architecture
+- Database can handle concurrent queries
+
+**100 Sellers and 100 Buyers**
+With 100 concurrent sellers and buyers (200 total clients), the system experiences maximum load causing a degrade in performance (response time).
+Response time increases significantly because:
+- High contention for database connections
+- Thread pool exhaustion causing queueing
+- SQLite write serialization (single writer)
+- Increased lock wait times
+
+Throughput plateaus because the system hits a bottleneck where a limited resource is fully saturated, so adding more clients only increases waiting, not completed work. More precisely due to:
+- Resource saturation (CPU, memory, I/O)
+- Lock contention overhead
+- Context switching overhead with many threads

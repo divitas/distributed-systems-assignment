@@ -1,635 +1,594 @@
 """
-Performance Testing Script
-Tests the system with varying numbers of concurrent clients
-Measures response time and throughput
-Logs results to both terminal and file
+Performance Test for PA2 - Online Marketplace Distributed System
+Measures average response time and average server throughput for:
+  - Scenario 1: 1 seller, 1 buyer
+  - Scenario 2: 10 sellers, 10 buyers
+  - Scenario 3: 100 sellers, 100 buyers
+
+Usage:
+  python3 performance_test.py --scenario 1
+  python3 performance_test.py --scenario 2
+  python3 performance_test.py --scenario 3
+  python3 performance_test.py --all          # Run all scenarios
 """
 
-import socket
-import threading
+import requests
 import time
+import threading
 import random
-import statistics
+import argparse
+import json
 import sys
 import os
 import logging
 from datetime import datetime
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from statistics import mean, stdev
 
-# Add parent directory to path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-import config
-from shared.protocol import Protocol
-from shared.constants import *
+# ========== LOGGING SETUP ==========
+LOG_FILE = f"performance_log_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log"
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(message)s",
+    handlers=[
+        logging.FileHandler(LOG_FILE),
+        logging.StreamHandler(sys.stdout)
+    ]
+)
+logger = logging.getLogger("perf_test")
+
+# ========== CONFIGURATION ==========
+# Update these to match your config.py
+BUYER_FRONTEND = "http://10.224.79.148:6001"
+SELLER_FRONTEND = "http://10.224.79.250:6002"
+
+ITEM_CATEGORIES = {1: "Electronics", 2: "Books", 3: "Clothing", 4: "Home", 5: "Sports", 6: "Toys", 7: "Food", 8: "Other"}
+SAMPLE_KEYWORDS = ["laptop", "phone", "book", "shirt", "ball", "toy", "snack", "chair", "camera", "watch"]
+
+NUM_RUNS = 10
+OPS_PER_RUN = 1000
+
+# ========== HELPER FUNCTIONS ==========
+
+def timed_request(method, url, **kwargs):
+    """Make a request and return (response, elapsed_time_seconds)"""
+    start = time.perf_counter()
+    try:
+        if method == "GET":
+            r = requests.get(url, **kwargs, timeout=30)
+        else:
+            r = requests.post(url, **kwargs, timeout=30)
+        elapsed = time.perf_counter() - start
+        return r.json(), elapsed
+    except Exception as e:
+        elapsed = time.perf_counter() - start
+        return None, elapsed
 
 
-def setup_logging():
-    """Setup logging to both file and console"""
-    # Create logs directory if it doesn't exist
-    log_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'logs')
-    os.makedirs(log_dir, exist_ok=True)
-    
-    # Create log filename with timestamp
-    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-    log_file = os.path.join(log_dir, f'performance_test_{timestamp}.log')
-    
-    # Create logger
-    logger = logging.getLogger('PerformanceTest')
-    logger.setLevel(logging.INFO)
-    
-    # Create formatters
-    file_formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
-    console_formatter = logging.Formatter('%(message)s')
-    
-    # File handler
-    file_handler = logging.FileHandler(log_file)
-    file_handler.setLevel(logging.INFO)
-    file_handler.setFormatter(file_formatter)
-    
-    # Console handler
-    console_handler = logging.StreamHandler()
-    console_handler.setLevel(logging.INFO)
-    console_handler.setFormatter(console_formatter)
-    
-    # Add handlers to logger
-    logger.addHandler(file_handler)
-    logger.addHandler(console_handler)
-    
-    return logger, log_file
+# ========== SELLER OPERATIONS ==========
 
-
-class PerformanceTester:
-    """Performance testing for the distributed marketplace"""
-    
-    def __init__(self):
-        self.results = {
-            'response_times': [],
-            'operations_completed': 0,
-            'errors': 0
-        }
-        self.lock = threading.Lock()
-    
-    def record_response_time(self, response_time):
-        """Record a response time"""
-        with self.lock:
-            self.results['response_times'].append(response_time)
-            self.results['operations_completed'] += 1
-    
-    def record_error(self):
-        """Record an error"""
-        with self.lock:
-            self.results['errors'] += 1
-    
-    def get_statistics(self):
-        """Calculate statistics from results"""
-        with self.lock:
-            if not self.results['response_times']:
-                return None
-            
-            return {
-                'avg_response_time': statistics.mean(self.results['response_times']),
-                'median_response_time': statistics.median(self.results['response_times']),
-                'min_response_time': min(self.results['response_times']),
-                'max_response_time': max(self.results['response_times']),
-                'std_dev': statistics.stdev(self.results['response_times']) if len(self.results['response_times']) > 1 else 0,
-                'operations_completed': self.results['operations_completed'],
-                'errors': self.results['errors']
-            }
-    
-    def reset(self):
-        """Reset statistics"""
-        with self.lock:
-            self.results = {
-                'response_times': [],
-                'operations_completed': 0,
-                'errors': 0
-            }
-
-
-class TestClient:
-    """Test client that performs operations"""
-    
-    def __init__(self, client_type, client_id, operations_count=10):
-        self.client_type = client_type  # 'buyer' or 'seller'
-        self.client_id = client_id
-        self.operations_count = operations_count
-        self.session_id = None
-        self.user_id = None
-        self.username = f"test_{client_type}_{client_id}_{int(time.time())}"
+class SellerWorker:
+    def __init__(self, worker_id):
+        self.worker_id = worker_id
+        self.username = f"perf_seller_{worker_id}_{int(time.time())}"
         self.password = "testpass123"
-    
-    def connect_to_server(self):
-        """Connect to appropriate frontend server"""
-        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        sock.settimeout(30)
-        
-        if self.client_type == 'seller':
-            sock.connect((config.SELLER_FRONTEND_HOST, config.SELLER_FRONTEND_PORT))
-        else:
-            sock.connect((config.BUYER_FRONTEND_HOST, config.BUYER_FRONTEND_PORT))
-        
-        return sock
-    
-    def make_request(self, sock, operation, data=None):
-        """Make a request and measure response time"""
-        start_time = time.time()
-        
+        self.seller_name = f"Test Seller {worker_id}"
+        self.session_id = None
+        self.seller_id = None
+        self.item_ids = []
+
+    def create_account(self):
+        resp, elapsed = timed_request("POST", f"{SELLER_FRONTEND}/seller/create_account", json={
+            "username": self.username, "password": self.password, "seller_name": self.seller_name
+        })
+        if resp and resp.get("status") == "success":
+            self.seller_id = resp["data"]["seller_id"]
+        return elapsed
+
+    def login(self):
+        resp, elapsed = timed_request("POST", f"{SELLER_FRONTEND}/seller/login", json={
+            "username": self.username, "password": self.password
+        })
+        if resp and resp.get("status") == "success":
+            self.session_id = resp["data"]["session_id"]
+            self.seller_id = resp["data"]["seller_id"]
+        return elapsed
+
+    def logout(self):
+        resp, elapsed = timed_request("POST", f"{SELLER_FRONTEND}/seller/logout", json={
+            "session_id": self.session_id
+        })
+        self.session_id = None
+        return elapsed
+
+    def register_item(self):
+        category = random.randint(1, 8)
+        item_name = f"TestItem_{self.worker_id}_{random.randint(1000, 9999)}"
+        resp, elapsed = timed_request("POST", f"{SELLER_FRONTEND}/seller/register_item", json={
+            "session_id": self.session_id,
+            "item_name": item_name,
+            "category": category,
+            "keywords": random.sample(SAMPLE_KEYWORDS, min(3, len(SAMPLE_KEYWORDS))),
+            "condition": random.choice(["new", "used"]),
+            "price": round(random.uniform(5.0, 500.0), 2),
+            "quantity": random.randint(1, 100)
+        })
+        if resp and resp.get("status") == "success":
+            item_id = resp.get("data", {}).get("item_id")
+            if item_id:
+                self.item_ids.append(str(item_id))
+        return elapsed
+
+    def change_price(self):
+        if not self.item_ids:
+            return 0
+        item_id = random.choice(self.item_ids)
+        resp, elapsed = timed_request("POST", f"{SELLER_FRONTEND}/seller/change_price", json={
+            "session_id": self.session_id,
+            "item_id": item_id,
+            "new_price": round(random.uniform(5.0, 500.0), 2)
+        })
+        return elapsed
+
+    def display_items(self):
+        resp, elapsed = timed_request("GET", f"{SELLER_FRONTEND}/seller/display_items", params={
+            "session_id": self.session_id
+        })
+        return elapsed
+
+    def get_rating(self):
+        resp, elapsed = timed_request("GET", f"{SELLER_FRONTEND}/seller/get_rating", params={
+            "session_id": self.session_id
+        })
+        return elapsed
+
+    def run_operations(self, num_ops):
+        """Run a mix of seller operations and return list of response times"""
+        response_times = []
+
+        # Setup: create account and login
+        self.create_account()
+        self.login()
+
+        if not self.session_id:
+            logger.info(f"  [Seller {self.worker_id}] Failed to login, skipping")
+            return response_times
+
+        # Register a few items first so we have items to work with
+        for _ in range(min(5, num_ops)):
+            elapsed = self.register_item()
+            response_times.append(elapsed)
+
+        # Run remaining operations as a random mix
+        remaining = num_ops - len(response_times)
+        operations = [
+            self.register_item,
+            self.change_price,
+            self.display_items,
+            self.get_rating,
+        ]
+
+        for _ in range(remaining):
+            op = random.choice(operations)
+            try:
+                elapsed = op()
+                response_times.append(elapsed)
+            except Exception as e:
+                pass
+
+        # Cleanup
         try:
-            request = Protocol.create_request(operation, data, self.session_id)
-            Protocol.send_message(sock, request)
-            response = Protocol.receive_message(sock)
-            
-            end_time = time.time()
-            response_time = end_time - start_time
-            
-            return response, response_time
-        except Exception as e:
-            print(f"Error in request: {e}")
-            return None, None
-    
-    def run_seller_operations(self, tester):
-        """Run seller operations"""
-        sock = None
-        try:
-            sock = self.connect_to_server()
-            
-            # Create account
-            response, rt = self.make_request(
-                sock,
-                API_SELLER_CREATE_ACCOUNT,
-                {
-                    'username': self.username,
-                    'password': self.password,
-                    'seller_name': f"Seller {self.client_id}"
-                }
-            )
-            
-            if response and response['status'] == STATUS_SUCCESS:
-                tester.record_response_time(rt)
-                self.user_id = response['data']['seller_id']
-            else:
-                tester.record_error()
-                return
-            
-            # Login
-            response, rt = self.make_request(
-                sock,
-                API_SELLER_LOGIN,
-                {
-                    'username': self.username,
-                    'password': self.password
-                }
-            )
-            
-            if response and response['status'] == STATUS_SUCCESS:
-                tester.record_response_time(rt)
-                self.session_id = response['data']['session_id']
-            else:
-                tester.record_error()
-                return
-            
-            item_ids = []
-            
-            # Perform operations
-            for i in range(self.operations_count):
-                # Register item
-                response, rt = self.make_request(
-                    sock,
-                    API_SELLER_REGISTER_ITEM,
-                    {
-                        'name': f"TestItem_{self.client_id}_{i}",
-                        'category': random.randint(1, 8),
-                        'keywords': [f"test{j}" for j in range(3)],
-                        'condition': random.choice([CONDITION_NEW, CONDITION_USED]),
-                        'price': round(random.uniform(10, 1000), 2),
-                        'quantity': random.randint(1, 100)
-                    }
-                )
-                
-                if response and response['status'] == STATUS_SUCCESS:
-                    tester.record_response_time(rt)
-                    item_ids.append(response['data']['item_id'])
-                else:
-                    tester.record_error()
-                
-                # Get rating
-                response, rt = self.make_request(sock, API_SELLER_GET_RATING)
-                if response and response['status'] == STATUS_SUCCESS:
-                    tester.record_response_time(rt)
-                else:
-                    tester.record_error()
-                
-                # Display items
-                response, rt = self.make_request(sock, API_SELLER_DISPLAY_ITEMS)
-                if response and response['status'] == STATUS_SUCCESS:
-                    tester.record_response_time(rt)
-                else:
-                    tester.record_error()
-                
-                # Change price of a random item
-                if item_ids:
-                    item_id = random.choice(item_ids)
-                    response, rt = self.make_request(
-                        sock,
-                        API_SELLER_CHANGE_PRICE,
-                        {
-                            'item_id': item_id,
-                            'new_price': round(random.uniform(10, 1000), 2)
-                        }
-                    )
-                    if response and response['status'] == STATUS_SUCCESS:
-                        tester.record_response_time(rt)
-                    else:
-                        tester.record_error()
-            
-            # Logout
-            response, rt = self.make_request(sock, API_SELLER_LOGOUT)
-            if response and response['status'] == STATUS_SUCCESS:
-                tester.record_response_time(rt)
-            else:
-                tester.record_error()
-            
-        except Exception as e:
-            print(f"Seller {self.client_id} error: {e}")
-            tester.record_error()
-        finally:
-            if sock:
-                sock.close()
-    
-    def run_buyer_operations(self, tester):
-        """Run buyer operations"""
-        sock = None
-        try:
-            sock = self.connect_to_server()
-            
-            # Create account
-            response, rt = self.make_request(
-                sock,
-                API_BUYER_CREATE_ACCOUNT,
-                {
-                    'username': self.username,
-                    'password': self.password,
-                    'buyer_name': f"Buyer {self.client_id}"
-                }
-            )
-            
-            if response and response['status'] == STATUS_SUCCESS:
-                tester.record_response_time(rt)
-                self.user_id = response['data']['buyer_id']
-            else:
-                tester.record_error()
-                return
-            
-            # Login
-            response, rt = self.make_request(
-                sock,
-                API_BUYER_LOGIN,
-                {
-                    'username': self.username,
-                    'password': self.password
-                }
-            )
-            
-            if response and response['status'] == STATUS_SUCCESS:
-                tester.record_response_time(rt)
-                self.session_id = response['data']['session_id']
-            else:
-                tester.record_error()
-                return
-            
-            # Perform operations
-            for i in range(self.operations_count):
-                # Search items
-                response, rt = self.make_request(
-                    sock,
-                    API_BUYER_SEARCH_ITEMS,
-                    {
-                        'category': random.randint(1, 8),
-                        'keywords': [f"test{j}" for j in range(2)]
-                    }
-                )
-                
-                found_items = []
-                if response and response['status'] == STATUS_SUCCESS:
-                    tester.record_response_time(rt)
-                    found_items = response['data'].get('items', [])
-                else:
-                    tester.record_error()
-                
-                # Get item details for a found item
-                if found_items:
-                    item_id = found_items[0]['item_id']
-                    response, rt = self.make_request(
-                        sock,
-                        API_BUYER_GET_ITEM,
-                        {'item_id': item_id}
-                    )
-                    if response and response['status'] == STATUS_SUCCESS:
-                        tester.record_response_time(rt)
-                    else:
-                        tester.record_error()
-                    
-                    # Add to cart (if available)
-                    if found_items[0]['quantity'] > 0:
-                        response, rt = self.make_request(
-                            sock,
-                            API_BUYER_ADD_TO_CART,
-                            {
-                                'item_id': item_id,
-                                'quantity': min(2, found_items[0]['quantity'])
-                            }
-                        )
-                        if response:
-                            tester.record_response_time(rt)
-                        else:
-                            tester.record_error()
-                
-                # Display cart
-                response, rt = self.make_request(sock, API_BUYER_DISPLAY_CART)
-                if response and response['status'] == STATUS_SUCCESS:
-                    tester.record_response_time(rt)
-                else:
-                    tester.record_error()
-                
-                # Get purchases
-                response, rt = self.make_request(sock, API_BUYER_GET_PURCHASES)
-                if response and response['status'] == STATUS_SUCCESS:
-                    tester.record_response_time(rt)
-                else:
-                    tester.record_error()
-            
-            # Save cart
-            response, rt = self.make_request(sock, API_BUYER_SAVE_CART)
-            if response and response['status'] == STATUS_SUCCESS:
-                tester.record_response_time(rt)
-            else:
-                tester.record_error()
-            
-            # Logout
-            response, rt = self.make_request(sock, API_BUYER_LOGOUT)
-            if response and response['status'] == STATUS_SUCCESS:
-                tester.record_response_time(rt)
-            else:
-                tester.record_error()
-            
-        except Exception as e:
-            print(f"Buyer {self.client_id} error: {e}")
-            tester.record_error()
-        finally:
-            if sock:
-                sock.close()
-    
-    def run(self, tester):
-        """Run the test client"""
-        if self.client_type == 'seller':
-            self.run_seller_operations(tester)
-        else:
-            self.run_buyer_operations(tester)
+            self.logout()
+        except:
+            pass
+
+        return response_times
 
 
-def run_scenario(logger, num_sellers, num_buyers, operations_per_client=10, num_runs=10):
+# ========== BUYER OPERATIONS ==========
+
+class BuyerWorker:
+    def __init__(self, worker_id):
+        self.worker_id = worker_id
+        self.username = f"perf_buyer_{worker_id}_{int(time.time())}"
+        self.password = "testpass123"
+        self.buyer_name = f"Test Buyer {worker_id}"
+        self.session_id = None
+        self.buyer_id = None
+        self.found_items = []
+
+    def create_account(self):
+        resp, elapsed = timed_request("POST", f"{BUYER_FRONTEND}/buyer/create_account", json={
+            "username": self.username, "password": self.password, "buyer_name": self.buyer_name
+        })
+        if resp and resp.get("status") == "success":
+            self.buyer_id = resp["data"]["buyer_id"]
+        return elapsed
+
+    def login(self):
+        resp, elapsed = timed_request("POST", f"{BUYER_FRONTEND}/buyer/login", json={
+            "username": self.username, "password": self.password
+        })
+        if resp and resp.get("status") == "success":
+            self.session_id = resp["data"]["session_id"]
+            self.buyer_id = resp["data"]["buyer_id"]
+        return elapsed
+
+    def logout(self):
+        resp, elapsed = timed_request("POST", f"{BUYER_FRONTEND}/buyer/logout", json={
+            "session_id": self.session_id
+        })
+        self.session_id = None
+        return elapsed
+
+    def search_items(self):
+        category = random.randint(1, 8)
+        keywords = random.sample(SAMPLE_KEYWORDS, min(2, len(SAMPLE_KEYWORDS)))
+        resp, elapsed = timed_request("POST", f"{BUYER_FRONTEND}/buyer/search_items", json={
+            "session_id": self.session_id,
+            "category": category,
+            "keywords": keywords
+        })
+        if resp and resp.get("status") == "success":
+            items = resp.get("data", {}).get("items", [])
+            for item in items:
+                item_id = item.get("item_id")
+                if item_id and str(item_id) not in self.found_items:
+                    self.found_items.append(str(item_id))
+        return elapsed
+
+    def get_item(self):
+        if not self.found_items:
+            return self.search_items()
+        item_id = random.choice(self.found_items)
+        resp, elapsed = timed_request("GET", f"{BUYER_FRONTEND}/buyer/get_item", params={
+            "session_id": self.session_id, "item_id": item_id
+        })
+        return elapsed
+
+    def add_to_cart(self):
+        if not self.found_items:
+            return self.search_items()
+        item_id = random.choice(self.found_items)
+        resp, elapsed = timed_request("POST", f"{BUYER_FRONTEND}/buyer/add_to_cart", json={
+            "session_id": self.session_id,
+            "item_id": item_id,
+            "quantity": random.randint(1, 3)
+        })
+        return elapsed
+
+    def remove_from_cart(self):
+        item_id = random.choice(self.found_items) if self.found_items else "1"
+        resp, elapsed = timed_request("POST", f"{BUYER_FRONTEND}/buyer/remove_from_cart", json={
+            "session_id": self.session_id,
+            "item_id": item_id,
+            "quantity": 1
+        })
+        return elapsed
+
+    def display_cart(self):
+        resp, elapsed = timed_request("GET", f"{BUYER_FRONTEND}/buyer/display_cart", params={
+            "session_id": self.session_id
+        })
+        return elapsed
+
+    def save_cart(self):
+        resp, elapsed = timed_request("POST", f"{BUYER_FRONTEND}/buyer/save_cart", json={
+            "session_id": self.session_id
+        })
+        return elapsed
+
+    def clear_cart(self):
+        resp, elapsed = timed_request("POST", f"{BUYER_FRONTEND}/buyer/clear_cart", json={
+            "session_id": self.session_id
+        })
+        return elapsed
+
+    def get_seller_rating(self):
+        resp, elapsed = timed_request("GET", f"{BUYER_FRONTEND}/buyer/get_seller_rating", params={
+            "session_id": self.session_id, "seller_id": "1"
+        })
+        return elapsed
+
+    def get_purchases(self):
+        resp, elapsed = timed_request("GET", f"{BUYER_FRONTEND}/buyer/get_purchases", params={
+            "session_id": self.session_id
+        })
+        return elapsed
+
+    def make_purchase(self):
+        if not self.found_items:
+            return self.search_items()
+        item_id = random.choice(self.found_items)
+        resp, elapsed = timed_request("POST", f"{BUYER_FRONTEND}/buyer/make_purchase", json={
+            "session_id": self.session_id,
+            "item_id": item_id,
+            "quantity": 1,
+            "card_name": "Test User",
+            "card_number": "4111111111111111",
+            "expiration_date": "12/25",
+            "security_code": "123"
+        })
+        return elapsed
+
+    def provide_feedback(self):
+        if not self.found_items:
+            return self.search_items()
+        item_id = random.choice(self.found_items)
+        resp, elapsed = timed_request("POST", f"{BUYER_FRONTEND}/buyer/provide_feedback", json={
+            "session_id": self.session_id,
+            "item_id": item_id,
+            "seller_id": "1",
+            "thumbs": random.choice([0, 1])
+        })
+        return elapsed
+
+    def run_operations(self, num_ops):
+        """Run a mix of buyer operations and return list of response times"""
+        response_times = []
+
+        # Setup: create account and login
+        self.create_account()
+        self.login()
+
+        if not self.session_id:
+            logger.info(f"  [Buyer {self.worker_id}] Failed to login, skipping")
+            return response_times
+
+        # Search first to populate found_items
+        for _ in range(min(5, num_ops)):
+            elapsed = self.search_items()
+            response_times.append(elapsed)
+
+        # Run remaining operations as a random mix
+        remaining = num_ops - len(response_times)
+        operations = [
+            self.search_items,
+            self.get_item,
+            self.add_to_cart,
+            self.remove_from_cart,
+            self.display_cart,
+            self.save_cart,
+            self.get_seller_rating,
+            self.get_purchases,
+            self.make_purchase,
+            self.provide_feedback,
+        ]
+
+        for _ in range(remaining):
+            op = random.choice(operations)
+            try:
+                elapsed = op()
+                response_times.append(elapsed)
+            except Exception as e:
+                pass
+
+        # Cleanup
+        try:
+            self.logout()
+        except:
+            pass
+
+        return response_times
+
+
+# ========== TEST RUNNER ==========
+
+def run_single_test(num_sellers, num_buyers, ops_per_client):
     """
-    Run a test scenario
-    
-    Args:
-        logger: Logger instance
-        num_sellers: Number of concurrent sellers
-        num_buyers: Number of concurrent buyers
-        operations_per_client: Number of operations each client performs
-        num_runs: Number of times to run this scenario
+    Run one test with given number of sellers and buyers.
+    Each client performs ops_per_client operations.
+    Returns (all_response_times, total_elapsed_time, total_ops_completed)
     """
-    logger.info(f"\n{'='*70}")
-    logger.info(f"SCENARIO: {num_sellers} Sellers, {num_buyers} Buyers")
-    logger.info(f"Operations per client: {operations_per_client}")
-    logger.info(f"Number of runs: {num_runs}")
-    logger.info(f"{'='*70}")
-    
-    all_run_stats = []
-    
-    for run in range(num_runs):
-        logger.info(f"\nRun {run + 1}/{num_runs}...")
-        
-        tester = PerformanceTester()
-        threads = []
-        
-        start_time = time.time()
-        
-        # Create seller threads
+    all_response_times = []
+    lock = threading.Lock()
+
+    def seller_task(worker_id):
+        seller = SellerWorker(worker_id)
+        times = seller.run_operations(ops_per_client)
+        with lock:
+            all_response_times.extend(times)
+        return len(times)
+
+    def buyer_task(worker_id):
+        buyer = BuyerWorker(worker_id)
+        times = buyer.run_operations(ops_per_client)
+        with lock:
+            all_response_times.extend(times)
+        return len(times)
+
+    total_ops = 0
+    start_time = time.perf_counter()
+
+    max_workers = num_sellers + num_buyers
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        futures = []
+
         for i in range(num_sellers):
-            client = TestClient('seller', i, operations_per_client)
-            thread = threading.Thread(target=client.run, args=(tester,))
-            threads.append(thread)
-        
-        # Create buyer threads
+            futures.append(executor.submit(seller_task, i))
         for i in range(num_buyers):
-            client = TestClient('buyer', i, operations_per_client)
-            thread = threading.Thread(target=client.run, args=(tester,))
-            threads.append(thread)
-        
-        # Start all threads
-        for thread in threads:
-            thread.start()
-        
-        # Wait for all threads to complete
-        for thread in threads:
-            thread.join()
-        
-        end_time = time.time()
-        total_time = end_time - start_time
-        
-        stats = tester.get_statistics()
-        if stats:
-            stats['total_time'] = total_time
-            stats['throughput'] = stats['operations_completed'] / total_time if total_time > 0 else 0
-            all_run_stats.append(stats)
-            
-            logger.info(f"  Completed in {total_time:.2f}s")
-            logger.info(f"  Operations: {stats['operations_completed']}, Errors: {stats['errors']}")
-            logger.info(f"  Avg Response Time: {stats['avg_response_time']*1000:.2f}ms")
-            logger.info(f"  Throughput: {stats['throughput']:.2f} ops/sec")
-    
-    # Calculate aggregate statistics
+            futures.append(executor.submit(buyer_task, i))
+
+        for future in as_completed(futures):
+            try:
+                ops = future.result()
+                total_ops += ops
+            except Exception as e:
+                logger.info(f"  Worker error: {e}")
+
+    total_time = time.perf_counter() - start_time
+
+    return all_response_times, total_time, total_ops
+
+
+def run_scenario(scenario_num, num_sellers, num_buyers):
+    """Run a scenario with NUM_RUNS repetitions and report metrics"""
+    # Each client does OPS_PER_RUN operations total
+    # Split evenly among clients
+    total_clients = num_sellers + num_buyers
+    ops_per_client = OPS_PER_RUN // total_clients
+    if ops_per_client < 10:
+        ops_per_client = 10
+
     logger.info(f"\n{'='*70}")
-    logger.info(f"AGGREGATE RESULTS ({num_runs} runs)")
+    logger.info(f"SCENARIO {scenario_num}: {num_sellers} seller(s), {num_buyers} buyer(s)")
+    logger.info(f"  Runs: {NUM_RUNS}")
+    logger.info(f"  Operations per client per run: {ops_per_client}")
+    logger.info(f"  Total operations per run: ~{ops_per_client * total_clients}")
     logger.info(f"{'='*70}")
-    
-    if all_run_stats:
-        avg_response_times = [s['avg_response_time'] for s in all_run_stats]
-        throughputs = [s['throughput'] for s in all_run_stats]
-        
-        logger.info(f"Average Response Time:")
-        logger.info(f"  Mean:   {statistics.mean(avg_response_times)*1000:.2f}ms")
-        logger.info(f"  Median: {statistics.median(avg_response_times)*1000:.2f}ms")
-        logger.info(f"  StdDev: {statistics.stdev(avg_response_times)*1000:.2f}ms" if len(avg_response_times) > 1 else "  StdDev: N/A")
-        
-        logger.info(f"\nAverage Throughput:")
-        logger.info(f"  Mean:   {statistics.mean(throughputs):.2f} ops/sec")
-        logger.info(f"  Median: {statistics.median(throughputs):.2f} ops/sec")
-        logger.info(f"  StdDev: {statistics.stdev(throughputs):.2f} ops/sec" if len(throughputs) > 1 else "  StdDev: N/A")
-        
-        total_ops = sum(s['operations_completed'] for s in all_run_stats)
-        total_errors = sum(s['errors'] for s in all_run_stats)
-        logger.info(f"\nTotal Operations: {total_ops}")
-        logger.info(f"Total Errors: {total_errors}")
-        logger.info(f"Error Rate: {(total_errors/total_ops*100) if total_ops > 0 else 0:.2f}%")
-    
-    return all_run_stats
+
+    run_avg_response_times = []
+    run_throughputs = []
+
+    for run in range(1, NUM_RUNS + 1):
+        logger.info(f"\n  --- Run {run}/{NUM_RUNS} ---")
+
+        response_times, total_time, total_ops = run_single_test(
+            num_sellers, num_buyers, ops_per_client
+        )
+
+        if response_times:
+            avg_rt = mean(response_times)
+            throughput = total_ops / total_time
+
+            run_avg_response_times.append(avg_rt)
+            run_throughputs.append(throughput)
+
+            logger.info(f"  Completed {total_ops} ops in {total_time:.2f}s")
+            logger.info(f"  Avg response time: {avg_rt*1000:.2f} ms")
+            logger.info(f"  Throughput: {throughput:.2f} ops/sec")
+        else:
+            logger.info(f"  No operations completed!")
+
+    # Final averages across all runs
+    logger.info(f"\n{'='*70}")
+    logger.info(f"SCENARIO {scenario_num} RESULTS ({num_sellers} sellers, {num_buyers} buyers)")
+    logger.info(f"{'='*70}")
+
+    if run_avg_response_times:
+        overall_avg_rt = mean(run_avg_response_times)
+        overall_avg_throughput = mean(run_throughputs)
+
+        rt_std = stdev(run_avg_response_times) if len(run_avg_response_times) > 1 else 0
+        tp_std = stdev(run_throughputs) if len(run_throughputs) > 1 else 0
+
+        logger.info(f"  Average Response Time:  {overall_avg_rt*1000:.2f} ms (± {rt_std*1000:.2f} ms)")
+        logger.info(f"  Average Throughput:     {overall_avg_throughput:.2f} ops/sec (± {tp_std:.2f} ops/sec)")
+        logger.info(f"  Min Response Time:      {min(run_avg_response_times)*1000:.2f} ms")
+        logger.info(f"  Max Response Time:      {max(run_avg_response_times)*1000:.2f} ms")
+        logger.info(f"  Min Throughput:         {min(run_throughputs):.2f} ops/sec")
+        logger.info(f"  Max Throughput:         {max(run_throughputs):.2f} ops/sec")
+
+        return {
+            "scenario": scenario_num,
+            "sellers": num_sellers,
+            "buyers": num_buyers,
+            "avg_response_time_ms": round(overall_avg_rt * 1000, 2),
+            "response_time_std_ms": round(rt_std * 1000, 2),
+            "avg_throughput_ops_sec": round(overall_avg_throughput, 2),
+            "throughput_std_ops_sec": round(tp_std, 2),
+        }
+    else:
+        logger.info("  No data collected!")
+        return None
 
 
-def write_csv_summary(log_dir, scenarios):
-    """Write a CSV summary of all scenarios"""
-    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-    csv_file = os.path.join(log_dir, f'performance_summary_{timestamp}.csv')
-    
-    with open(csv_file, 'w') as f:
-        # Write header
-        f.write("Scenario,Num_Sellers,Num_Buyers,Ops_Per_Client,Num_Runs,")
-        f.write("Avg_Response_Time_ms,Median_Response_Time_ms,StdDev_Response_Time_ms,")
-        f.write("Avg_Throughput_ops_sec,Median_Throughput_ops_sec,StdDev_Throughput_ops_sec,")
-        f.write("Total_Operations,Total_Errors,Error_Rate_Percent\n")
-        
-        # Write data for each scenario
-        for scenario in scenarios:
-            name = scenario['name']
-            num_sellers = scenario['num_sellers']
-            num_buyers = scenario['num_buyers']
-            ops_per_client = scenario['ops_per_client']
-            num_runs = scenario['num_runs']
-            stats = scenario['stats']
-            
-            if stats:
-                avg_response_times = [s['avg_response_time'] for s in stats]
-                throughputs = [s['throughput'] for s in stats]
-                total_ops = sum(s['operations_completed'] for s in stats)
-                total_errors = sum(s['errors'] for s in stats)
-                
-                avg_rt = statistics.mean(avg_response_times) * 1000
-                median_rt = statistics.median(avg_response_times) * 1000
-                stddev_rt = statistics.stdev(avg_response_times) * 1000 if len(avg_response_times) > 1 else 0
-                
-                avg_tp = statistics.mean(throughputs)
-                median_tp = statistics.median(throughputs)
-                stddev_tp = statistics.stdev(throughputs) if len(throughputs) > 1 else 0
-                
-                error_rate = (total_errors / total_ops * 100) if total_ops > 0 else 0
-                
-                f.write(f"{name},{num_sellers},{num_buyers},{ops_per_client},{num_runs},")
-                f.write(f"{avg_rt:.2f},{median_rt:.2f},{stddev_rt:.2f},")
-                f.write(f"{avg_tp:.2f},{median_tp:.2f},{stddev_tp:.2f},")
-                f.write(f"{total_ops},{total_errors},{error_rate:.2f}\n")
-    
-    return csv_file
+def print_comparison(results):
+    """Print a comparison table of all scenarios"""
+    logger.info(f"\n{'='*70}")
+    logger.info("PERFORMANCE COMPARISON ACROSS SCENARIOS")
+    logger.info(f"{'='*70}")
+    logger.info(f"{'Scenario':<12} {'Sellers':<10} {'Buyers':<10} {'Avg RT (ms)':<15} {'Avg Throughput':<20}")
+    logger.info(f"{'-'*70}")
+    for r in results:
+        if r:
+            logger.info(f"  {r['scenario']:<10} {r['sellers']:<10} {r['buyers']:<10} "
+                  f"{r['avg_response_time_ms']:<15} {r['avg_throughput_ops_sec']:<20}")
+    logger.info(f"{'='*70}")
 
 
 def main():
-    """Main entry point"""
-    # Setup logging
-    logger, log_file = setup_logging()
-    log_dir = os.path.dirname(log_file)
-    
-    logger.info("\n" + "="*70)
-    logger.info("ONLINE MARKETPLACE PERFORMANCE TESTING")
-    logger.info(f"Started at: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-    logger.info(f"Log file: {log_file}")
-    logger.info("="*70)
-    
-    # Wait for servers to be ready
-    logger.info("\nWaiting for servers to be ready...")
-    time.sleep(2)
-    
-    # Store all scenario results for CSV export
-    all_scenarios = []
-    
-    # Scenario 1: 1 seller, 1 buyer
-    logger.info("\n" + "="*70)
-    logger.info("SCENARIO 1: Light Load (1 Seller, 1 Buyer)")
-    logger.info("="*70)
-    scenario1_stats = run_scenario(
-        logger,
-        num_sellers=1,
-        num_buyers=1,
-        operations_per_client=100,
-        num_runs=10
-    )
-    all_scenarios.append({
-        'name': 'Light Load (1S+1B)',
-        'num_sellers': 1,
-        'num_buyers': 1,
-        'ops_per_client': 100,
-        'num_runs': 10,
-        'stats': scenario1_stats
-    })
-    
-    # Scenario 2: 10 sellers, 10 buyers
-    logger.info("\n" + "="*70)
-    logger.info("SCENARIO 2: Medium Load (10 Sellers, 10 Buyers)")
-    logger.info("="*70)
-    scenario2_stats = run_scenario(
-        logger,
-        num_sellers=10,
-        num_buyers=10,
-        operations_per_client=50,
-        num_runs=10
-    )
-    all_scenarios.append({
-        'name': 'Medium Load (10S+10B)',
-        'num_sellers': 10,
-        'num_buyers': 10,
-        'ops_per_client': 50,
-        'num_runs': 10,
-        'stats': scenario2_stats
-    })
-    
-    # Scenario 3: 100 sellers, 100 buyers
-    logger.info("\n" + "="*70)
-    logger.info("SCENARIO 3: Heavy Load (100 Sellers, 100 Buyers)")
-    logger.info("="*70)
-    scenario3_stats = run_scenario(
-        logger,
-        num_sellers=100,
-        num_buyers=100,
-        operations_per_client=5,
-        num_runs=10
-    )
-    all_scenarios.append({
-        'name': 'Heavy Load (100S+100B)',
-        'num_sellers': 100,
-        'num_buyers': 100,
-        'ops_per_client': 5,
-        'num_runs': 10,
-        'stats': scenario3_stats
-    })
-    
-    # Final summary
-    logger.info("\n" + "="*70)
-    logger.info("PERFORMANCE SUMMARY")
-    logger.info("="*70)
-    
-    scenarios = [
-        ("Scenario 1 (1S+1B)", scenario1_stats),
-        ("Scenario 2 (10S+10B)", scenario2_stats),
-        ("Scenario 3 (100S+100B)", scenario3_stats)
-    ]
-    
-    logger.info(f"\n{'Scenario':<25} {'Avg RT (ms)':<15} {'Avg Throughput (ops/s)':<25}")
-    logger.info("-" * 70)
-    
-    for name, stats in scenarios:
-        if stats:
-            avg_rt = statistics.mean([s['avg_response_time'] for s in stats]) * 1000
-            avg_tp = statistics.mean([s['throughput'] for s in stats])
-            logger.info(f"{name:<25} {avg_rt:<15.2f} {avg_tp:<25.2f}")
-    
-    # Write CSV summary
-    csv_file = write_csv_summary(log_dir, all_scenarios)
-    
-    logger.info("\n" + "="*70)
-    logger.info(f"Completed at: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-    logger.info(f"Log file saved to: {log_file}")
-    logger.info(f"CSV summary saved to: {csv_file}")
-    logger.info("Testing complete!")
-    logger.info("="*70)
+    global BUYER_FRONTEND, SELLER_FRONTEND, NUM_RUNS, OPS_PER_RUN
+
+    parser = argparse.ArgumentParser(description="Performance Test for PA2")
+    parser.add_argument("--scenario", type=int, choices=[1, 2, 3],
+                        help="Run specific scenario (1, 2, or 3)")
+    parser.add_argument("--all", action="store_true",
+                        help="Run all three scenarios")
+    parser.add_argument("--buyer-url", type=str, default=BUYER_FRONTEND,
+                        help=f"Buyer frontend URL (default: {BUYER_FRONTEND})")
+    parser.add_argument("--seller-url", type=str, default=SELLER_FRONTEND,
+                        help=f"Seller frontend URL (default: {SELLER_FRONTEND})")
+    parser.add_argument("--runs", type=int, default=NUM_RUNS,
+                        help=f"Number of runs per scenario (default: {NUM_RUNS})")
+    parser.add_argument("--ops", type=int, default=OPS_PER_RUN,
+                        help=f"Total operations per run (default: {OPS_PER_RUN})")
+
+    args = parser.parse_args()
+    BUYER_FRONTEND = args.buyer_url
+    SELLER_FRONTEND = args.seller_url
+    NUM_RUNS = args.runs
+    OPS_PER_RUN = args.ops
+
+    logger.info("\n" + "=" * 70)
+    logger.info("PA2 PERFORMANCE TEST")
+    logger.info("=" * 70)
+    logger.info(f"Buyer Frontend:  {BUYER_FRONTEND}")
+    logger.info(f"Seller Frontend: {SELLER_FRONTEND}")
+    logger.info(f"Runs per scenario: {NUM_RUNS}")
+    logger.info(f"Operations per run: {OPS_PER_RUN}")
+
+    # Quick connectivity check
+    logger.info("\nChecking connectivity...")
+    try:
+        requests.get(f"{BUYER_FRONTEND}/docs", timeout=5)
+        logger.info(f"  ✓ Buyer frontend reachable")
+    except:
+        logger.info(f"  ✗ Cannot reach buyer frontend at {BUYER_FRONTEND}")
+        logger.info("  Make sure the buyer server is running on VM3")
+        return
+
+    try:
+        requests.get(f"{SELLER_FRONTEND}/docs", timeout=5)
+        logger.info(f"  ✓ Seller frontend reachable")
+    except:
+        logger.info(f"  ✗ Cannot reach seller frontend at {SELLER_FRONTEND}")
+        logger.info("  Make sure the seller server is running on VM4")
+        return
+
+    results = []
+
+    scenarios = {
+        1: (1, 1),
+        2: (10, 10),
+        3: (100, 100),
+    }
+
+    if args.all:
+        for s in [1, 2, 3]:
+            num_sellers, num_buyers = scenarios[s]
+            result = run_scenario(s, num_sellers, num_buyers)
+            results.append(result)
+        print_comparison(results)
+    elif args.scenario:
+        num_sellers, num_buyers = scenarios[args.scenario]
+        result = run_scenario(args.scenario, num_sellers, num_buyers)
+        results.append(result)
+    else:
+        logger.info("\nPlease specify --scenario 1/2/3 or --all")
+        parser.print_help()
+        return
+
+    # Save results to JSON
+    output_file = f"performance_results_{int(time.time())}.json"
+    with open(output_file, "w") as f:
+        json.dump([r for r in results if r], f, indent=2)
+    logger.info(f"\nResults saved to {output_file}")
+    logger.info(f"Full log saved to {LOG_FILE}")
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

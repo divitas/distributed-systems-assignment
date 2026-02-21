@@ -378,7 +378,7 @@ class CustomerDBServicer(customer_pb2_grpc.CustomerDBServicer):
 
     # ========== Cart RPCs ==========
 
-    def GetCart(self, request, context):
+    """def GetCart(self, request, context):
         conn = self._get_connection()
         cursor = conn.cursor()
         try:
@@ -388,6 +388,77 @@ class CustomerDBServicer(customer_pb2_grpc.CustomerDBServicer):
             )
             cart = [{'item_id': r[0], 'quantity': r[1]} for r in cursor.fetchall()]
             return self._ok({'cart': cart})
+        finally:
+            conn.close()
+
+    def GetCart(self, request, context):
+        conn = self._get_connection()
+        cursor = conn.cursor()
+        try:
+            # Get buyer_id from session
+            cursor.execute(
+                'SELECT buyer_id FROM buyer_sessions WHERE session_id = ?',
+                (request.session_id,)
+            )
+            buyer = cursor.fetchone()
+            if not buyer:
+                return self._err("Invalid session")
+
+            buyer_id = buyer[0]
+
+            # Get session cart
+            cursor.execute(
+                'SELECT item_id, quantity FROM shopping_carts WHERE session_id = ?',
+                (request.session_id,)
+            )
+            cart = {r[0]: r[1] for r in cursor.fetchall()}
+
+            # Merge saved cart (sum quantities)
+            cursor.execute(
+                'SELECT item_id, quantity FROM saved_carts WHERE buyer_id = ?',
+                (buyer_id,)
+            )
+            for item_id, quantity in cursor.fetchall():
+                cart[item_id] = cart.get(item_id, 0) + quantity
+
+            result = [{'item_id': k, 'quantity': v} for k, v in cart.items()]
+            return self._ok({'cart': result})
+        finally:
+            conn.close()"""
+
+    #session cart items take priority, and saved cart only fills in items the current session hasn't touched.
+    def GetCart(self, request, context):
+        conn = self._get_connection()
+        cursor = conn.cursor()
+        try:
+            cursor.execute(
+                'SELECT buyer_id FROM buyer_sessions WHERE session_id = ?',
+                (request.session_id,)
+            )
+            buyer = cursor.fetchone()
+            if not buyer:
+                return self._err("Invalid session")
+
+            buyer_id = buyer[0]
+
+            # Get session cart
+            cursor.execute(
+                'SELECT item_id, quantity FROM shopping_carts WHERE session_id = ?',
+                (request.session_id,)
+            )
+            cart = {r[0]: r[1] for r in cursor.fetchall()}
+
+            # Add saved cart items that aren't in session cart
+            cursor.execute(
+                'SELECT item_id, quantity FROM saved_carts WHERE buyer_id = ?',
+                (buyer_id,)
+            )
+            for item_id, quantity in cursor.fetchall():
+                if item_id not in cart:
+                    cart[item_id] = quantity
+
+            result = [{'item_id': k, 'quantity': v} for k, v in cart.items()]
+            return self._ok({'cart': result})
         finally:
             conn.close()
 

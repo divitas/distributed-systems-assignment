@@ -44,7 +44,7 @@ def process():
 <soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/">
   <soap:Body>
     <ProcessPaymentResponse>
-      <r>{}</r>
+      <result>{}</result>
     </ProcessPaymentResponse>
   </soap:Body>
 </soap:Envelope>""".format(result)

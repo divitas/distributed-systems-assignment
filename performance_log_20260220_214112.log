@@ -1,0 +1,14 @@
+2026-02-20 21:41:12,213 [INFO] 
+======================================================================
+2026-02-20 21:41:12,213 [INFO] PA2 PERFORMANCE TEST
+2026-02-20 21:41:12,213 [INFO] ======================================================================
+2026-02-20 21:41:12,213 [INFO] Buyer Frontend:  http://10.224.79.148:6001
+2026-02-20 21:41:12,213 [INFO] Seller Frontend: http://10.224.79.250:6002
+2026-02-20 21:41:12,213 [INFO] Runs per scenario: 10
+2026-02-20 21:41:12,213 [INFO] Operations per run: 1000
+2026-02-20 21:41:12,213 [INFO] 
+Checking connectivity...
+2026-02-20 21:41:12,280 [INFO]   ✓ Buyer frontend reachable
+2026-02-20 21:41:12,319 [INFO]   ✓ Seller frontend reachable
+2026-02-20 21:41:12,319 [INFO] 
+Please specify --scenario 1/2/3 or --all

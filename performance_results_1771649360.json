@@ -1,0 +1,29 @@
+[
+  {
+    "scenario": 1,
+    "sellers": 1,
+    "buyers": 1,
+    "avg_response_time_ms": 48.64,
+    "response_time_std_ms": 1.22,
+    "avg_throughput_ops_sec": 34.75,
+    "throughput_std_ops_sec": 1.01
+  },
+  {
+    "scenario": 2,
+    "sellers": 10,
+    "buyers": 10,
+    "avg_response_time_ms": 79.78,
+    "response_time_std_ms": 1.73,
+    "avg_throughput_ops_sec": 184.01,
+    "throughput_std_ops_sec": 2.91
+  },
+  {
+    "scenario": 3,
+    "sellers": 100,
+    "buyers": 100,
+    "avg_response_time_ms": 640.93,
+    "response_time_std_ms": 10.92,
+    "avg_throughput_ops_sec": 164.92,
+    "throughput_std_ops_sec": 2.22
+  }
+]

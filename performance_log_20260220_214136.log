@@ -1,0 +1,226 @@
+2026-02-20 21:41:36,441 [INFO] 
+======================================================================
+2026-02-20 21:41:36,441 [INFO] PA2 PERFORMANCE TEST
+2026-02-20 21:41:36,441 [INFO] ======================================================================
+2026-02-20 21:41:36,441 [INFO] Buyer Frontend:  http://10.224.79.148:6001
+2026-02-20 21:41:36,441 [INFO] Seller Frontend: http://10.224.79.250:6002
+2026-02-20 21:41:36,441 [INFO] Runs per scenario: 10
+2026-02-20 21:41:36,441 [INFO] Operations per run: 1000
+2026-02-20 21:41:36,441 [INFO] 
+Checking connectivity...
+2026-02-20 21:41:36,487 [INFO]   ✓ Buyer frontend reachable
+2026-02-20 21:41:36,527 [INFO]   ✓ Seller frontend reachable
+2026-02-20 21:41:36,527 [INFO] 
+======================================================================
+2026-02-20 21:41:36,527 [INFO] SCENARIO 1: 1 seller(s), 1 buyer(s)
+2026-02-20 21:41:36,527 [INFO]   Runs: 10
+2026-02-20 21:41:36,527 [INFO]   Operations per client per run: 500
+2026-02-20 21:41:36,527 [INFO]   Total operations per run: ~1000
+2026-02-20 21:41:36,527 [INFO] ======================================================================
+2026-02-20 21:41:36,527 [INFO] 
+  --- Run 1/10 ---
+2026-02-20 21:42:07,639 [INFO]   Completed 1000 ops in 31.11s
+2026-02-20 21:42:07,640 [INFO]   Avg response time: 51.50 ms
+2026-02-20 21:42:07,640 [INFO]   Throughput: 32.14 ops/sec
+2026-02-20 21:42:07,640 [INFO] 
+  --- Run 2/10 ---
+2026-02-20 21:42:36,614 [INFO]   Completed 1000 ops in 28.97s
+2026-02-20 21:42:36,615 [INFO]   Avg response time: 49.92 ms
+2026-02-20 21:42:36,615 [INFO]   Throughput: 34.51 ops/sec
+2026-02-20 21:42:36,615 [INFO] 
+  --- Run 3/10 ---
+2026-02-20 21:43:05,563 [INFO]   Completed 1000 ops in 28.95s
+2026-02-20 21:43:05,563 [INFO]   Avg response time: 48.65 ms
+2026-02-20 21:43:05,563 [INFO]   Throughput: 34.55 ops/sec
+2026-02-20 21:43:05,563 [INFO] 
+  --- Run 4/10 ---
+2026-02-20 21:43:34,075 [INFO]   Completed 1000 ops in 28.51s
+2026-02-20 21:43:34,076 [INFO]   Avg response time: 48.34 ms
+2026-02-20 21:43:34,077 [INFO]   Throughput: 35.07 ops/sec
+2026-02-20 21:43:34,077 [INFO] 
+  --- Run 5/10 ---
+2026-02-20 21:44:02,688 [INFO]   Completed 1000 ops in 28.61s
+2026-02-20 21:44:02,689 [INFO]   Avg response time: 47.97 ms
+2026-02-20 21:44:02,689 [INFO]   Throughput: 34.95 ops/sec
+2026-02-20 21:44:02,689 [INFO] 
+  --- Run 6/10 ---
+2026-02-20 21:44:31,656 [INFO]   Completed 1000 ops in 28.96s
+2026-02-20 21:44:31,657 [INFO]   Avg response time: 48.60 ms
+2026-02-20 21:44:31,658 [INFO]   Throughput: 34.52 ops/sec
+2026-02-20 21:44:31,658 [INFO] 
+  --- Run 7/10 ---
+2026-02-20 21:45:00,192 [INFO]   Completed 1000 ops in 28.53s
+2026-02-20 21:45:00,193 [INFO]   Avg response time: 48.24 ms
+2026-02-20 21:45:00,193 [INFO]   Throughput: 35.05 ops/sec
+2026-02-20 21:45:00,193 [INFO] 
+  --- Run 8/10 ---
+2026-02-20 21:45:28,353 [INFO]   Completed 1000 ops in 28.16s
+2026-02-20 21:45:28,355 [INFO]   Avg response time: 47.79 ms
+2026-02-20 21:45:28,355 [INFO]   Throughput: 35.51 ops/sec
+2026-02-20 21:45:28,356 [INFO] 
+  --- Run 9/10 ---
+2026-02-20 21:45:56,371 [INFO]   Completed 1000 ops in 28.01s
+2026-02-20 21:45:56,372 [INFO]   Avg response time: 48.04 ms
+2026-02-20 21:45:56,372 [INFO]   Throughput: 35.70 ops/sec
+2026-02-20 21:45:56,372 [INFO] 
+  --- Run 10/10 ---
+2026-02-20 21:46:24,596 [INFO]   Completed 1000 ops in 28.22s
+2026-02-20 21:46:24,597 [INFO]   Avg response time: 47.32 ms
+2026-02-20 21:46:24,597 [INFO]   Throughput: 35.43 ops/sec
+2026-02-20 21:46:24,597 [INFO] 
+======================================================================
+2026-02-20 21:46:24,597 [INFO] SCENARIO 1 RESULTS (1 sellers, 1 buyers)
+2026-02-20 21:46:24,597 [INFO] ======================================================================
+2026-02-20 21:46:24,598 [INFO]   Average Response Time:  48.64 ms (± 1.22 ms)
+2026-02-20 21:46:24,598 [INFO]   Average Throughput:     34.75 ops/sec (± 1.01 ops/sec)
+2026-02-20 21:46:24,599 [INFO]   Min Response Time:      47.32 ms
+2026-02-20 21:46:24,599 [INFO]   Max Response Time:      51.50 ms
+2026-02-20 21:46:24,599 [INFO]   Min Throughput:         32.14 ops/sec
+2026-02-20 21:46:24,599 [INFO]   Max Throughput:         35.70 ops/sec
+2026-02-20 21:46:24,600 [INFO] 
+======================================================================
+2026-02-20 21:46:24,600 [INFO] SCENARIO 2: 10 seller(s), 10 buyer(s)
+2026-02-20 21:46:24,600 [INFO]   Runs: 10
+2026-02-20 21:46:24,600 [INFO]   Operations per client per run: 50
+2026-02-20 21:46:24,600 [INFO]   Total operations per run: ~1000
+2026-02-20 21:46:24,600 [INFO] ======================================================================
+2026-02-20 21:46:24,600 [INFO] 
+  --- Run 1/10 ---
+2026-02-20 21:46:30,065 [INFO]   Completed 1000 ops in 5.46s
+2026-02-20 21:46:30,066 [INFO]   Avg response time: 78.66 ms
+2026-02-20 21:46:30,066 [INFO]   Throughput: 183.02 ops/sec
+2026-02-20 21:46:30,066 [INFO] 
+  --- Run 2/10 ---
+2026-02-20 21:46:35,362 [INFO]   Completed 1000 ops in 5.29s
+2026-02-20 21:46:35,363 [INFO]   Avg response time: 76.39 ms
+2026-02-20 21:46:35,363 [INFO]   Throughput: 188.86 ops/sec
+2026-02-20 21:46:35,364 [INFO] 
+  --- Run 3/10 ---
+2026-02-20 21:46:40,825 [INFO]   Completed 1000 ops in 5.46s
+2026-02-20 21:46:40,826 [INFO]   Avg response time: 80.12 ms
+2026-02-20 21:46:40,826 [INFO]   Throughput: 183.11 ops/sec
+2026-02-20 21:46:40,826 [INFO] 
+  --- Run 4/10 ---
+2026-02-20 21:46:46,321 [INFO]   Completed 1000 ops in 5.49s
+2026-02-20 21:46:46,322 [INFO]   Avg response time: 81.24 ms
+2026-02-20 21:46:46,322 [INFO]   Throughput: 182.02 ops/sec
+2026-02-20 21:46:46,323 [INFO] 
+  --- Run 5/10 ---
+2026-02-20 21:46:51,658 [INFO]   Completed 1000 ops in 5.33s
+2026-02-20 21:46:51,658 [INFO]   Avg response time: 78.35 ms
+2026-02-20 21:46:51,658 [INFO]   Throughput: 187.50 ops/sec
+2026-02-20 21:46:51,658 [INFO] 
+  --- Run 6/10 ---
+2026-02-20 21:46:57,218 [INFO]   Completed 1000 ops in 5.56s
+2026-02-20 21:46:57,220 [INFO]   Avg response time: 82.28 ms
+2026-02-20 21:46:57,220 [INFO]   Throughput: 179.90 ops/sec
+2026-02-20 21:46:57,220 [INFO] 
+  --- Run 7/10 ---
+2026-02-20 21:47:02,758 [INFO]   Completed 1000 ops in 5.54s
+2026-02-20 21:47:02,759 [INFO]   Avg response time: 80.91 ms
+2026-02-20 21:47:02,759 [INFO]   Throughput: 180.58 ops/sec
+2026-02-20 21:47:02,759 [INFO] 
+  --- Run 8/10 ---
+2026-02-20 21:47:08,162 [INFO]   Completed 1000 ops in 5.40s
+2026-02-20 21:47:08,163 [INFO]   Avg response time: 78.77 ms
+2026-02-20 21:47:08,164 [INFO]   Throughput: 185.10 ops/sec
+2026-02-20 21:47:08,164 [INFO] 
+  --- Run 9/10 ---
+2026-02-20 21:47:13,606 [INFO]   Completed 1000 ops in 5.44s
+2026-02-20 21:47:13,606 [INFO]   Avg response time: 80.88 ms
+2026-02-20 21:47:13,607 [INFO]   Throughput: 183.79 ops/sec
+2026-02-20 21:47:13,607 [INFO] 
+  --- Run 10/10 ---
+2026-02-20 21:47:18,978 [INFO]   Completed 1000 ops in 5.37s
+2026-02-20 21:47:18,981 [INFO]   Avg response time: 80.19 ms
+2026-02-20 21:47:18,982 [INFO]   Throughput: 186.24 ops/sec
+2026-02-20 21:47:18,982 [INFO] 
+======================================================================
+2026-02-20 21:47:18,982 [INFO] SCENARIO 2 RESULTS (10 sellers, 10 buyers)
+2026-02-20 21:47:18,982 [INFO] ======================================================================
+2026-02-20 21:47:18,982 [INFO]   Average Response Time:  79.78 ms (± 1.73 ms)
+2026-02-20 21:47:18,982 [INFO]   Average Throughput:     184.01 ops/sec (± 2.91 ops/sec)
+2026-02-20 21:47:18,983 [INFO]   Min Response Time:      76.39 ms
+2026-02-20 21:47:18,983 [INFO]   Max Response Time:      82.28 ms
+2026-02-20 21:47:18,983 [INFO]   Min Throughput:         179.90 ops/sec
+2026-02-20 21:47:18,983 [INFO]   Max Throughput:         188.86 ops/sec
+2026-02-20 21:47:18,983 [INFO] 
+======================================================================
+2026-02-20 21:47:18,983 [INFO] SCENARIO 3: 100 seller(s), 100 buyer(s)
+2026-02-20 21:47:18,983 [INFO]   Runs: 10
+2026-02-20 21:47:18,983 [INFO]   Operations per client per run: 10
+2026-02-20 21:47:18,983 [INFO]   Total operations per run: ~2000
+2026-02-20 21:47:18,983 [INFO] ======================================================================
+2026-02-20 21:47:18,983 [INFO] 
+  --- Run 1/10 ---
+2026-02-20 21:47:31,282 [INFO]   Completed 2000 ops in 12.30s
+2026-02-20 21:47:31,283 [INFO]   Avg response time: 650.16 ms
+2026-02-20 21:47:31,283 [INFO]   Throughput: 162.67 ops/sec
+2026-02-20 21:47:31,283 [INFO] 
+  --- Run 2/10 ---
+2026-02-20 21:47:43,736 [INFO]   Completed 2000 ops in 12.45s
+2026-02-20 21:47:43,737 [INFO]   Avg response time: 658.80 ms
+2026-02-20 21:47:43,737 [INFO]   Throughput: 160.67 ops/sec
+2026-02-20 21:47:43,737 [INFO] 
+  --- Run 3/10 ---
+2026-02-20 21:47:55,806 [INFO]   Completed 2000 ops in 12.07s
+2026-02-20 21:47:55,807 [INFO]   Avg response time: 636.69 ms
+2026-02-20 21:47:55,807 [INFO]   Throughput: 165.75 ops/sec
+2026-02-20 21:47:55,807 [INFO] 
+  --- Run 4/10 ---
+2026-02-20 21:48:07,892 [INFO]   Completed 2000 ops in 12.08s
+2026-02-20 21:48:07,893 [INFO]   Avg response time: 648.74 ms
+2026-02-20 21:48:07,893 [INFO]   Throughput: 165.54 ops/sec
+2026-02-20 21:48:07,893 [INFO] 
+  --- Run 5/10 ---
+2026-02-20 21:48:19,813 [INFO]   Completed 2000 ops in 11.92s
+2026-02-20 21:48:19,814 [INFO]   Avg response time: 627.50 ms
+2026-02-20 21:48:19,814 [INFO]   Throughput: 167.84 ops/sec
+2026-02-20 21:48:19,814 [INFO] 
+  --- Run 6/10 ---
+2026-02-20 21:48:32,020 [INFO]   Completed 2000 ops in 12.20s
+2026-02-20 21:48:32,022 [INFO]   Avg response time: 643.90 ms
+2026-02-20 21:48:32,022 [INFO]   Throughput: 163.90 ops/sec
+2026-02-20 21:48:32,022 [INFO] 
+  --- Run 7/10 ---
+2026-02-20 21:48:44,085 [INFO]   Completed 2000 ops in 12.06s
+2026-02-20 21:48:44,085 [INFO]   Avg response time: 639.68 ms
+2026-02-20 21:48:44,086 [INFO]   Throughput: 165.84 ops/sec
+2026-02-20 21:48:44,086 [INFO] 
+  --- Run 8/10 ---
+2026-02-20 21:48:56,144 [INFO]   Completed 2000 ops in 12.06s
+2026-02-20 21:48:56,145 [INFO]   Avg response time: 628.23 ms
+2026-02-20 21:48:56,146 [INFO]   Throughput: 165.90 ops/sec
+2026-02-20 21:48:56,146 [INFO] 
+  --- Run 9/10 ---
+2026-02-20 21:49:08,376 [INFO]   Completed 2000 ops in 12.23s
+2026-02-20 21:49:08,377 [INFO]   Avg response time: 648.20 ms
+2026-02-20 21:49:08,377 [INFO]   Throughput: 163.54 ops/sec
+2026-02-20 21:49:08,377 [INFO] 
+  --- Run 10/10 ---
+2026-02-20 21:49:20,317 [INFO]   Completed 2000 ops in 11.94s
+2026-02-20 21:49:20,317 [INFO]   Avg response time: 627.36 ms
+2026-02-20 21:49:20,317 [INFO]   Throughput: 167.53 ops/sec
+2026-02-20 21:49:20,317 [INFO] 
+======================================================================
+2026-02-20 21:49:20,317 [INFO] SCENARIO 3 RESULTS (100 sellers, 100 buyers)
+2026-02-20 21:49:20,318 [INFO] ======================================================================
+2026-02-20 21:49:20,318 [INFO]   Average Response Time:  640.93 ms (± 10.92 ms)
+2026-02-20 21:49:20,318 [INFO]   Average Throughput:     164.92 ops/sec (± 2.22 ops/sec)
+2026-02-20 21:49:20,318 [INFO]   Min Response Time:      627.36 ms
+2026-02-20 21:49:20,318 [INFO]   Max Response Time:      658.80 ms
+2026-02-20 21:49:20,318 [INFO]   Min Throughput:         160.67 ops/sec
+2026-02-20 21:49:20,318 [INFO]   Max Throughput:         167.84 ops/sec
+2026-02-20 21:49:20,318 [INFO] 
+======================================================================
+2026-02-20 21:49:20,318 [INFO] PERFORMANCE COMPARISON ACROSS SCENARIOS
+2026-02-20 21:49:20,318 [INFO] ======================================================================
+2026-02-20 21:49:20,318 [INFO] Scenario     Sellers    Buyers     Avg RT (ms)     Avg Throughput      
+2026-02-20 21:49:20,318 [INFO] ----------------------------------------------------------------------
+2026-02-20 21:49:20,318 [INFO]   1          1          1          48.64           34.75               
+2026-02-20 21:49:20,318 [INFO]   2          10         10         79.78           184.01              
+2026-02-20 21:49:20,318 [INFO]   3          100        100        640.93          164.92              
+2026-02-20 21:49:20,318 [INFO] ======================================================================
+2026-02-20 21:49:20,320 [INFO] 
+Results saved to performance_results_1771649360.json
+2026-02-20 21:49:20,320 [INFO] Full log saved to performance_log_20260220_214136.log

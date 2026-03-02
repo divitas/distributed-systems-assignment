@@ -11,8 +11,8 @@ CONDITION_USED = "Used"
 # ============================================================================
 # FEEDBACK TYPES
 # ============================================================================
-FEEDBACK_THUMBS_UP = 1
-FEEDBACK_THUMBS_DOWN = -1
+FEEDBACK_THUMBS_UP = "thumbs_up"
+FEEDBACK_THUMBS_DOWN = "thumbs_down"
 
 # ============================================================================
 # RESPONSE STATUS CODES

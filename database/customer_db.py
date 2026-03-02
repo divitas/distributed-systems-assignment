@@ -383,10 +383,35 @@ class CustomerDBServicer(customer_pb2_grpc.CustomerDBServicer):
         cursor = conn.cursor()
         try:
             cursor.execute(
+                'SELECT buyer_id FROM buyer_sessions WHERE session_id = ?',
+                (request.session_id,)
+            )
+            result = cursor.fetchone()
+            if not result:
+                return self._err("Invalid session")
+            buyer_id = result[0]
+
+            # Get saved cart
+            cursor.execute(
+                'SELECT item_id, quantity FROM saved_carts WHERE buyer_id = ?',
+                (buyer_id,)
+            )
+            saved_cart = {r[0]: r[1] for r in cursor.fetchall()}
+
+            # Get session cart (may include tombstones where quantity=0)
+            cursor.execute(
                 'SELECT item_id, quantity FROM shopping_carts WHERE session_id = ?',
                 (request.session_id,)
             )
-            cart = [{'item_id': r[0], 'quantity': r[1]} for r in cursor.fetchall()]
+            session_cart = {r[0]: r[1] for r in cursor.fetchall()}
+
+            # Merge: session overrides saved, then filter out tombstones (qty=0)
+            merged = {**saved_cart, **session_cart}
+            cart = [
+                {'item_id': item_id, 'quantity': qty}
+                for item_id, qty in merged.items()
+                if qty > 0  # qty=0 means explicitly removed this session
+            ]
             return self._ok({'cart': cart})
         finally:
             conn.close()
@@ -419,27 +444,48 @@ class CustomerDBServicer(customer_pb2_grpc.CustomerDBServicer):
         conn = self._get_connection()
         cursor = conn.cursor()
         try:
+            # Check session cart first
             cursor.execute(
                 'SELECT quantity FROM shopping_carts WHERE session_id = ? AND item_id = ?',
                 (request.session_id, request.item_id)
             )
-            result = cursor.fetchone()
-            if result:
-                new_qty = result[0] - request.quantity
-                if new_qty <= 0:
-                    cursor.execute(
-                        'DELETE FROM shopping_carts WHERE session_id = ? AND item_id = ?',
-                        (request.session_id, request.item_id)
-                    )
-                else:
-                    cursor.execute(
-                        'UPDATE shopping_carts SET quantity = ? WHERE session_id = ? AND item_id = ?',
-                        (new_qty, request.session_id, request.item_id)
-                    )
-                conn.commit()
-                return self._ok()
+            session_result = cursor.fetchone()
+
+            if session_result:
+                new_qty = session_result[0] - request.quantity
             else:
-                return self._err("Item not in cart")
+                # Item might only exist in saved_carts — look it up
+                cursor.execute(
+                    'SELECT buyer_id FROM buyer_sessions WHERE session_id = ?',
+                    (request.session_id,)
+                )
+                buyer = cursor.fetchone()
+                if not buyer:
+                    return self._err("Invalid session")
+                cursor.execute(
+                    'SELECT quantity FROM saved_carts WHERE buyer_id = ? AND item_id = ?',
+                    (buyer[0], request.item_id)
+                )
+                saved_result = cursor.fetchone()
+                if not saved_result:
+                    return self._err("Item not in cart")
+                new_qty = saved_result[0] - request.quantity
+
+            if new_qty <= 0:
+                # Tombstone: quantity=0 means "explicitly deleted this session"
+                cursor.execute(
+                    'INSERT OR REPLACE INTO shopping_carts (session_id, buyer_id, item_id, quantity) '
+                    'VALUES (?, (SELECT buyer_id FROM buyer_sessions WHERE session_id = ?), ?, 0)',
+                    (request.session_id, request.session_id, request.item_id)
+                )
+            else:
+                cursor.execute(
+                    'INSERT OR REPLACE INTO shopping_carts (session_id, buyer_id, item_id, quantity) '
+                    'VALUES (?, (SELECT buyer_id FROM buyer_sessions WHERE session_id = ?), ?, ?)',
+                    (request.session_id, request.session_id, request.item_id, new_qty)
+                )
+            conn.commit()
+            return self._ok()
         finally:
             conn.close()
 
@@ -448,16 +494,45 @@ class CustomerDBServicer(customer_pb2_grpc.CustomerDBServicer):
         cursor = conn.cursor()
         try:
             cursor.execute(
+                'SELECT buyer_id FROM buyer_sessions WHERE session_id = ?',
+                (request.session_id,)
+            )
+            result = cursor.fetchone()
+            if not result:
+                return self._err("Invalid session")
+            buyer_id = result[0]
+
+            cursor.execute(
                 'SELECT item_id, quantity FROM shopping_carts WHERE session_id = ?',
                 (request.session_id,)
             )
-            cart_items = cursor.fetchall()
-            cursor.execute('DELETE FROM saved_carts WHERE buyer_id = ?', (request.buyer_id,))
-            for item_id, quantity in cart_items:
+            session_cart = cursor.fetchall()
+
+            # Get current saved cart
+            cursor.execute(
+                'SELECT item_id, quantity FROM saved_carts WHERE buyer_id = ?',
+                (buyer_id,)
+            )
+            saved_cart = {r[0]: r[1] for r in cursor.fetchall()}
+
+            # Apply session changes (including tombstones) onto saved cart
+            for item_id, qty in session_cart:
+                if qty == 0:
+                    saved_cart.pop(item_id, None)  # tombstone = delete from saved
+                else:
+                    saved_cart[item_id] = qty
+
+            # Rewrite saved_carts
+            cursor.execute('DELETE FROM saved_carts WHERE buyer_id = ?', (buyer_id,))
+            for item_id, qty in saved_cart.items():
                 cursor.execute(
                     'INSERT INTO saved_carts (buyer_id, item_id, quantity) VALUES (?, ?, ?)',
-                    (request.buyer_id, item_id, quantity)
+                    (buyer_id, item_id, qty)
                 )
+
+            # Reset session cart to clean state (no tombstones) matching what was just saved
+            cursor.execute('DELETE FROM shopping_carts WHERE session_id = ?', (request.session_id,))
+
             conn.commit()
             return self._ok()
         finally:
@@ -467,7 +542,34 @@ class CustomerDBServicer(customer_pb2_grpc.CustomerDBServicer):
         conn = self._get_connection()
         cursor = conn.cursor()
         try:
-            cursor.execute('DELETE FROM shopping_carts WHERE session_id = ?', (request.session_id,))
+            # Get buyer_id
+            cursor.execute(
+                'SELECT buyer_id FROM buyer_sessions WHERE session_id = ?',
+                (request.session_id,)
+            )
+            result = cursor.fetchone()
+            if not result:
+                return self._err("Invalid session")
+            buyer_id = result[0]
+
+            # Delete existing session cart entries
+            cursor.execute(
+                'DELETE FROM shopping_carts WHERE session_id = ?',
+                (request.session_id,)
+            )
+
+            # Insert tombstones for every item in saved_carts
+            # so GetCart merge knows everything was explicitly cleared
+            cursor.execute(
+                'SELECT item_id FROM saved_carts WHERE buyer_id = ?',
+                (buyer_id,)
+            )
+            for (item_id,) in cursor.fetchall():
+                cursor.execute(
+                    'INSERT INTO shopping_carts (session_id, buyer_id, item_id, quantity) VALUES (?, ?, ?, 0)',
+                    (request.session_id, buyer_id, item_id)
+                )
+
             conn.commit()
             return self._ok()
         finally:

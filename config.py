@@ -44,10 +44,10 @@ SELLER_FRONTEND_REPLICAS = [
 # ============================================================================
 CUSTOMER_DB_REPLICAS = [
     {"id": 0, "host": "10.224.76.209", "grpc_port": 5001, "udp_port": 5101, "db_file": "data/customer_0.db"},
-    {"id": 1, "host": "10.224.78.247",  "grpc_port": 5003, "udp_port": 5103, "db_file": "data/customer_1.db"},
+    {"id": 1, "host": "10.224.78.247", "grpc_port": 5003, "udp_port": 5103, "db_file": "data/customer_1.db"},
     {"id": 2, "host": "10.224.79.170", "grpc_port": 5005, "udp_port": 5105, "db_file": "data/customer_2.db"},
     {"id": 3, "host": "10.224.77.206", "grpc_port": 5007, "udp_port": 5107, "db_file": "data/customer_3.db"},
-    {"id": 4, "host": "10.224.79.164", "grpc_port": 5009, "udp_port": 5109, "db_file": "data/customer_4.db"},
+    {"id": 4, "host": "10.224.77.206", "grpc_port": 5009, "udp_port": 5109, "db_file": "data/customer_4.db"},
 ]
 
 ATOMIC_BROADCAST_SOCKET_TIMEOUT = 0.5

@@ -161,6 +161,8 @@ class AtomicBroadcastNode:
 
         self._broadcast(req_msg)
 
+        print(f"[Replica {self.replica_id}] BROADCAST WRITE op={op_name} req_id={req_id}")
+
         ok = done_event.wait(timeout=config.ATOMIC_BROADCAST_DELIVERY_WAIT_TIMEOUT)
         if not ok:
             with self.lock:
@@ -288,6 +290,7 @@ class AtomicBroadcastNode:
 
     def _handle_request_message(self, msg: dict):
         req_id = (int(msg["sender_id"]), int(msg["local_seq"]))
+        print(f"[Replica {self.replica_id}] REQUEST received req_id={req_id}")
 
         with self.lock:
             if req_id not in self.requests:
@@ -336,6 +339,8 @@ class AtomicBroadcastNode:
             for s in range(self.next_global_to_deliver, global_seq):
                 if s not in self.sequences:
                     self._request_missing_sequence(s)
+
+            print(f"[Replica {self.replica_id}] SEQUENCE received global_seq={global_seq} req_id={req_id}")
 
     def _handle_retransmit_message(self, msg: dict):
         missing_type = msg["missing_type"]
@@ -475,6 +480,7 @@ class AtomicBroadcastNode:
                     "sequencer_id": self.replica_id,
                 }
                 self._broadcast(seq_msg)
+                print(f"[Replica {self.replica_id}] SEQUENCE assigned global_seq={k} req_id={chosen}")
 
             except Exception as e:
                 print(f"[Replica {self.replica_id}] sequencer worker error: {e}")
@@ -539,6 +545,8 @@ class AtomicBroadcastNode:
                         pending["result"] = result
                         pending["event"].set()
 
+                print(f"[Replica {self.replica_id}] DELIVER global_seq={s} req_id={req_id}")
+
             except Exception as e:
                 print(f"[Replica {self.replica_id}] delivery worker error: {e}")
 
@@ -583,8 +591,8 @@ class CustomerDBServicer(customer_pb2_grpc.CustomerDBServicer):
             apply_callback=self._apply_replicated_operation
         )
 
-        self.cleanup_thread = threading.Thread(target=self._session_cleanup_worker, daemon=True)
-        self.cleanup_thread.start()
+        # self.cleanup_thread = threading.Thread(target=self._session_cleanup_worker, daemon=True)
+        # self.cleanup_thread.start()
 
     # -------------------------------------------------------------------------
     # DB helpers

@@ -329,18 +329,18 @@ class AtomicBroadcastNode:
             self.sequences[global_seq] = req_id
             self.sequence_sender[global_seq] = sequencer_id
             self.highest_sequence_seen = max(self.highest_sequence_seen, global_seq)
+            self.next_global_to_assign = max(self.next_global_to_assign, global_seq + 1)
             self._refresh_self_progress()
 
-            # If sequence references a request I don't have yet, ask original sender
             if req_id not in self.requests:
                 self._request_missing_request(req_id[0], req_id[1])
 
-            # Detect missing sequence numbers below this one
             for s in range(self.next_global_to_deliver, global_seq):
                 if s not in self.sequences:
                     self._request_missing_sequence(s)
 
             print(f"[Replica {self.replica_id}] SEQUENCE received global_seq={global_seq} req_id={req_id}")
+            print(f"[Replica {self.replica_id}] next_global_to_assign now {self.next_global_to_assign}")
 
     def _handle_retransmit_message(self, msg: dict):
         missing_type = msg["missing_type"]
@@ -481,6 +481,7 @@ class AtomicBroadcastNode:
                 }
                 self._broadcast(seq_msg)
                 print(f"[Replica {self.replica_id}] SEQUENCE assigned global_seq={k} req_id={chosen}")
+                print(f"[Replica {self.replica_id}] sequencer loop sees k={self.next_global_to_assign}")
 
             except Exception as e:
                 print(f"[Replica {self.replica_id}] sequencer worker error: {e}")

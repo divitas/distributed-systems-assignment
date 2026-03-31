@@ -527,8 +527,9 @@ class AtomicBroadcastNode:
                         continue
 
                     # Majority delivery condition from PA3
-                    if not self._majority_has_request_and_sequence(s, req_id):
-                        continue
+                    # TEMP DEBUG: disable majority gate for now
+                    # if not self._majority_has_request_and_sequence(s, req_id):
+                    #     continue
 
                     request_msg = self.requests[req_id]
 

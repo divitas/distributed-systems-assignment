@@ -61,15 +61,17 @@ class AtomicBroadcastNode:
     MSG_REQUEST = "REQUEST"
     MSG_SEQUENCE = "SEQUENCE"
     MSG_RETRANSMIT = "RETRANSMIT"
+    MSG_ACK = "ACK"
 
     RETRANSMIT_REQUEST = "REQUEST"
     RETRANSMIT_SEQUENCE = "SEQUENCE"
 
-    def __init__(self, replica_id: int, replicas: list, apply_callback):
+    def __init__(self, replica_id: int, replicas: list, apply_callback, start_global_seq: int = 0):
         self.replica_id = replica_id
         self.replicas = sorted(replicas, key=lambda x: x["id"])
         self.n = len(self.replicas)
         self.apply_callback = apply_callback
+        self.start_global_seq = start_global_seq
 
         me = self._replica(self.replica_id)
         self.udp_host = me["host"]
@@ -83,8 +85,8 @@ class AtomicBroadcastNode:
 
         # Request identifiers: (sender_id, local_seq)
         self.local_request_counter = 0
-        self.next_global_to_deliver = 0
-        self.next_global_to_assign = 0
+        self.next_global_to_deliver = self.start_global_seq
+        self.next_global_to_assign = self.start_global_seq
 
         # Request and sequence logs
         self.requests: Dict[Tuple[int, int], dict] = {}
@@ -96,8 +98,8 @@ class AtomicBroadcastNode:
 
         # Progress / metadata knowledge
         self.highest_request_seen_per_sender = {r["id"]: -1 for r in self.replicas}
-        self.highest_sequence_seen = -1
-        self.highest_sequence_delivered = -1
+        self.highest_sequence_seen = max(-1, self.start_global_seq - 1)
+        self.highest_sequence_delivered = max(-1, self.start_global_seq - 1)
 
         # What I know each peer knows
         self.peer_known_request = {
@@ -240,6 +242,10 @@ class AtomicBroadcastNode:
         for r in self.replicas:
             self._send(r["id"], message)
 
+    def _broadcast_ack(self):
+        ack_msg = { "type": self.MSG_ACK }
+        self._broadcast(ack_msg)
+
     def _update_peer_meta(self, from_replica: int, meta: dict):
         if meta is None:
             return
@@ -287,6 +293,8 @@ class AtomicBroadcastNode:
             self._handle_sequence_message(msg)
         elif msg_type == self.MSG_RETRANSMIT:
             self._handle_retransmit_message(msg)
+        elif msg_type == self.MSG_ACK:
+            pass  # Meta already updated above
 
     def _handle_request_message(self, msg: dict):
         req_id = (int(msg["sender_id"]), int(msg["local_seq"]))
@@ -320,6 +328,8 @@ class AtomicBroadcastNode:
                         expected += 1
                     expected = seen + 1
 
+        self._broadcast_ack()
+
     def _handle_sequence_message(self, msg: dict):
         global_seq = int(msg["global_seq"])
         req_id = self._parse_request_id(msg["request_id"])
@@ -341,6 +351,8 @@ class AtomicBroadcastNode:
 
             print(f"[Replica {self.replica_id}] SEQUENCE received global_seq={global_seq} req_id={req_id}")
             print(f"[Replica {self.replica_id}] next_global_to_assign now {self.next_global_to_assign}")
+
+        self._broadcast_ack()
 
     def _handle_retransmit_message(self, msg: dict):
         missing_type = msg["missing_type"]
@@ -373,6 +385,7 @@ class AtomicBroadcastNode:
                 self._broadcast(seq_msg)
 
     def _request_missing_request(self, sender_id: int, local_seq: int):
+        print(f"[Replica {self.replica_id}] NACK sent for missing request {(sender_id, local_seq)}")
         rt = {
             "type": self.MSG_RETRANSMIT,
             "missing_type": self.RETRANSMIT_REQUEST,
@@ -382,6 +395,7 @@ class AtomicBroadcastNode:
         self._send(sender_id, rt)
 
     def _request_missing_sequence(self, global_seq: int):
+        print(f"[Replica {self.replica_id}] NACK sent for missing sequence {global_seq}")
         responsible = self._responsible_sequencer(global_seq)
         rt = {
             "type": self.MSG_RETRANSMIT,
@@ -528,14 +542,13 @@ class AtomicBroadcastNode:
                         continue
 
                     # Majority delivery condition from PA3
-                    # TEMP DEBUG: disable majority gate for now
-                    # if not self._majority_has_request_and_sequence(s, req_id):
-                    #     continue
+                    if not self._majority_has_request_and_sequence(s, req_id):
+                        continue
 
                     request_msg = self.requests[req_id]
 
                 # Apply outside lock
-                result = self.apply_callback(request_msg["op_name"], request_msg["payload"])
+                result = self.apply_callback(request_msg["op_name"], request_msg["payload"], global_seq=s)
 
                 with self.lock:
                     self.highest_sequence_delivered = s
@@ -586,11 +599,18 @@ class CustomerDBServicer(customer_pb2_grpc.CustomerDBServicer):
         self.conn_lock = threading.Lock()
 
         self._init_database()
+        
+        conn = self._get_connection()
+        cursor = conn.cursor()
+        cursor.execute("SELECT next_global_to_deliver FROM replication_state WHERE id = 1")
+        start_seq = cursor.fetchone()[0]
+        conn.close()
 
         self.abcast = AtomicBroadcastNode(
             replica_id=replica_id,
             replicas=replicas,
-            apply_callback=self._apply_replicated_operation
+            apply_callback=self._apply_replicated_operation,
+            start_global_seq=start_seq
         )
 
         # self.cleanup_thread = threading.Thread(target=self._session_cleanup_worker, daemon=True)
@@ -603,6 +623,15 @@ class CustomerDBServicer(customer_pb2_grpc.CustomerDBServicer):
     def _init_database(self):
         from database.init_db import init_customer_database
         init_customer_database(self.db_path)
+        conn = self._get_connection()
+        cursor = conn.cursor()
+        cursor.execute("CREATE TABLE IF NOT EXISTS replication_state (id INTEGER PRIMARY KEY, next_global_to_deliver INTEGER)")
+        cursor.execute("SELECT next_global_to_deliver FROM replication_state WHERE id = 1")
+        row = cursor.fetchone()
+        if not row:
+            cursor.execute("INSERT INTO replication_state (id, next_global_to_deliver) VALUES (1, 0)")
+        conn.commit()
+        conn.close()
 
     def _get_connection(self):
         return sqlite3.connect(self.db_path, check_same_thread=False)
@@ -633,13 +662,17 @@ class CustomerDBServicer(customer_pb2_grpc.CustomerDBServicer):
     # Atomic apply path
     # -------------------------------------------------------------------------
 
-    def _apply_replicated_operation(self, op_name: str, payload: dict) -> dict:
+    def _apply_replicated_operation(self, op_name: str, payload: dict, global_seq: int = -1) -> dict:
         """
         This is the only place that mutates SQLite.
         Every replica applies the same operation in the same global order.
         """
         conn = self._get_connection()
         cursor = conn.cursor()
+
+        def _persist_seq():
+            if global_seq >= 0:
+                cursor.execute("UPDATE replication_state SET next_global_to_deliver = ? WHERE id = 1", (global_seq + 1,))
 
         try:
             # ==============================================================
@@ -652,6 +685,7 @@ class CustomerDBServicer(customer_pb2_grpc.CustomerDBServicer):
                         (payload["username"], payload["password"], payload["seller_name"])
                     )
                     seller_id = cursor.lastrowid
+                    _persist_seq()
                     conn.commit()
                     return {"status": 1, "message": "Success", "data": {"seller_id": seller_id}}
                 except sqlite3.IntegrityError:
@@ -675,6 +709,7 @@ class CustomerDBServicer(customer_pb2_grpc.CustomerDBServicer):
                     "INSERT INTO seller_sessions (session_id, seller_id, last_activity, created_at) VALUES (?, ?, ?, ?)",
                     (session_id, seller_id, current_time, current_time)
                 )
+                _persist_seq()
                 conn.commit()
                 return {
                     "status": 1,
@@ -684,6 +719,7 @@ class CustomerDBServicer(customer_pb2_grpc.CustomerDBServicer):
 
             elif op_name == "LogoutSeller":
                 cursor.execute("DELETE FROM seller_sessions WHERE session_id = ?", (payload["session_id"],))
+                _persist_seq()
                 conn.commit()
                 return {"status": 1, "message": "Success", "data": {}}
 
@@ -698,6 +734,7 @@ class CustomerDBServicer(customer_pb2_grpc.CustomerDBServicer):
                         "UPDATE sellers SET thumbs_down = thumbs_down + 1 WHERE seller_id = ?",
                         (payload["seller_id"],)
                     )
+                _persist_seq()
                 conn.commit()
                 return {"status": 1, "message": "Success", "data": {}}
 
@@ -707,6 +744,7 @@ class CustomerDBServicer(customer_pb2_grpc.CustomerDBServicer):
                     "UPDATE sellers SET items_sold = items_sold + ? WHERE seller_id = ?",
                     (qty, payload["seller_id"])
                 )
+                _persist_seq()
                 conn.commit()
                 return {"status": 1, "message": "Success", "data": {}}
 
@@ -720,6 +758,7 @@ class CustomerDBServicer(customer_pb2_grpc.CustomerDBServicer):
                         (payload["username"], payload["password"], payload["buyer_name"])
                     )
                     buyer_id = cursor.lastrowid
+                    _persist_seq()
                     conn.commit()
                     return {"status": 1, "message": "Success", "data": {"buyer_id": buyer_id}}
                 except sqlite3.IntegrityError:
@@ -752,6 +791,7 @@ class CustomerDBServicer(customer_pb2_grpc.CustomerDBServicer):
                         (session_id, buyer_id, item_id, quantity)
                     )
 
+                _persist_seq()
                 conn.commit()
                 return {
                     "status": 1,
@@ -762,6 +802,7 @@ class CustomerDBServicer(customer_pb2_grpc.CustomerDBServicer):
             elif op_name == "LogoutBuyer":
                 cursor.execute("DELETE FROM shopping_carts WHERE session_id = ?", (payload["session_id"],))
                 cursor.execute("DELETE FROM buyer_sessions WHERE session_id = ?", (payload["session_id"],))
+                _persist_seq()
                 conn.commit()
                 return {"status": 1, "message": "Success", "data": {}}
 
@@ -774,6 +815,7 @@ class CustomerDBServicer(customer_pb2_grpc.CustomerDBServicer):
                     "UPDATE buyers SET items_purchased = items_purchased + ? WHERE buyer_id = ?",
                     (payload["quantity"], payload["buyer_id"])
                 )
+                _persist_seq()
                 conn.commit()
                 return {"status": 1, "message": "Success", "data": {}}
 
@@ -796,6 +838,7 @@ class CustomerDBServicer(customer_pb2_grpc.CustomerDBServicer):
                         "INSERT INTO shopping_carts (session_id, buyer_id, item_id, quantity) VALUES (?, ?, ?, ?)",
                         (payload["session_id"], payload["buyer_id"], payload["item_id"], payload["quantity"])
                     )
+                _persist_seq()
                 conn.commit()
                 return {"status": 1, "message": "Success", "data": {}}
 
@@ -831,6 +874,7 @@ class CustomerDBServicer(customer_pb2_grpc.CustomerDBServicer):
                         (payload["session_id"], buyer_id, payload["item_id"], new_qty)
                     )
 
+                _persist_seq()
                 conn.commit()
                 return {"status": 1, "message": "Success", "data": {}}
 
@@ -864,6 +908,7 @@ class CustomerDBServicer(customer_pb2_grpc.CustomerDBServicer):
                     )
 
                 cursor.execute("DELETE FROM shopping_carts WHERE session_id = ?", (session_id,))
+                _persist_seq()
                 conn.commit()
                 return {"status": 1, "message": "Success", "data": {}}
 
@@ -880,6 +925,7 @@ class CustomerDBServicer(customer_pb2_grpc.CustomerDBServicer):
                         (session_id, buyer_id, item_id)
                     )
 
+                _persist_seq()
                 conn.commit()
                 return {"status": 1, "message": "Success", "data": {}}
 
@@ -896,6 +942,7 @@ class CustomerDBServicer(customer_pb2_grpc.CustomerDBServicer):
                     DELETE FROM shopping_carts
                     WHERE session_id NOT IN (SELECT session_id FROM buyer_sessions)
                 """)
+                _persist_seq()
                 conn.commit()
                 return {"status": 1, "message": "Success", "data": {}}
 

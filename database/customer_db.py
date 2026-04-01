@@ -410,6 +410,10 @@ class AtomicBroadcastNode:
                 time.sleep(config.ATOMIC_BROADCAST_RETRANSMIT_INTERVAL)
 
                 with self.lock:
+                    # Periodically gossip our state (Heartbeat) to prevent majority delivery deadlocks 
+                    # from dropped UDP ACK packets
+                    self._broadcast_ack()
+
                     # Ask for missing sequence numbers near the delivery frontier
                     for s in range(self.next_global_to_deliver, self.highest_sequence_seen + 1):
                         if s not in self.sequences:

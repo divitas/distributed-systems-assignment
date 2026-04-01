@@ -374,9 +374,6 @@ class AtomicBroadcastNode:
 
         elif missing_type == self.RETRANSMIT_SEQUENCE:
             global_seq = int(msg["global_seq"])
-            responsible = self._responsible_sequencer(global_seq)
-            if responsible != self.replica_id:
-                return
 
             with self.lock:
                 req_id = self.sequences.get(global_seq)
@@ -385,9 +382,13 @@ class AtomicBroadcastNode:
                     "type": self.MSG_SEQUENCE,
                     "global_seq": global_seq,
                     "request_id": f"{req_id[0]}:{req_id[1]}",
-                    "sequencer_id": self.replica_id,
+                    "sequencer_id": self._responsible_sequencer(global_seq),
                 }
-                self._broadcast(seq_msg)
+                target = msg.get("meta", {}).get("sender_replica_id")
+                if target is not None:
+                    self._send(target, seq_msg)
+                else:
+                    self._broadcast(seq_msg)
 
     def _request_missing_request(self, sender_id: int, local_seq: int):
         print(f"[Replica {self.replica_id}] NACK sent for missing request {(sender_id, local_seq)}")
@@ -407,7 +408,11 @@ class AtomicBroadcastNode:
             "missing_type": self.RETRANSMIT_SEQUENCE,
             "global_seq": global_seq,
         }
-        self._send(responsible, rt)
+        if responsible == self.replica_id:
+            # I am the responsible sequencer but I lost my memory. Ask everyone else!
+            self._broadcast(rt)
+        else:
+            self._send(responsible, rt)
 
     def _retransmit_loop(self):
         while self.running:

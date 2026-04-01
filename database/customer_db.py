@@ -471,13 +471,14 @@ class AtomicBroadcastNode:
                     if self._responsible_sequencer(k) != self.replica_id:
                         continue
 
-                    # Condition 1 and 2 effectively enforced by monotonic next_global_to_assign
+                    # Condition 1 and 2: Ensure we processed the immediate prior sequence
                     if k > 0:
-                        if (k - 1) not in self.sequences:
-                            continue
-                        prev_req = self.sequences.get(k - 1)
-                        if prev_req is None or prev_req not in self.requests:
-                            continue
+                        if (k - 1) >= self.next_global_to_deliver:
+                            if (k - 1) not in self.sequences:
+                                continue
+                            prev_req = self.sequences.get(k - 1)
+                            if prev_req is None or prev_req not in self.requests:
+                                continue
 
                     candidates = self._eligible_requests_for_assignment()
                     if not candidates:

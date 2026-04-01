@@ -1,0 +1,118 @@
+"""
+Shared constants across the distributed system
+"""
+
+# ============================================================================
+# ITEM CONDITIONS
+# ============================================================================
+CONDITION_NEW = "New"
+CONDITION_USED = "Used"
+
+# ============================================================================
+# FEEDBACK TYPES
+# ============================================================================
+FEEDBACK_THUMBS_UP = 1
+FEEDBACK_THUMBS_DOWN = -1
+
+# ============================================================================
+# RESPONSE STATUS CODES
+# ============================================================================
+STATUS_SUCCESS = "SUCCESS"
+STATUS_ERROR = "ERROR"
+STATUS_NOT_FOUND = "NOT_FOUND"
+STATUS_UNAUTHORIZED = "UNAUTHORIZED"
+STATUS_INVALID_REQUEST = "INVALID_REQUEST"
+STATUS_DUPLICATE = "DUPLICATE"
+STATUS_INSUFFICIENT_QUANTITY = "INSUFFICIENT_QUANTITY"
+
+# ============================================================================
+# API OPERATION CODES - Customer Database
+# ============================================================================
+OP_CREATE_SELLER = "CREATE_SELLER"
+OP_CREATE_BUYER = "CREATE_BUYER"
+OP_LOGIN_SELLER = "LOGIN_SELLER"
+OP_LOGIN_BUYER = "LOGIN_BUYER"
+OP_LOGOUT_SELLER = "LOGOUT_SELLER"
+OP_LOGOUT_BUYER = "LOGOUT_BUYER"
+OP_VALIDATE_SESSION_SELLER = "VALIDATE_SESSION_SELLER"
+OP_VALIDATE_SESSION_BUYER = "VALIDATE_SESSION_BUYER"
+OP_GET_SELLER_INFO = "GET_SELLER_INFO"
+OP_GET_BUYER_INFO = "GET_BUYER_INFO"
+OP_GET_SELLER_RATING = "GET_SELLER_RATING"
+OP_UPDATE_SELLER_FEEDBACK = "UPDATE_SELLER_FEEDBACK"
+OP_UPDATE_SELLER_ITEMS_SOLD = "UPDATE_SELLER_ITEMS_SOLD"
+OP_UPDATE_BUYER_ITEMS_PURCHASED = "UPDATE_BUYER_ITEMS_PURCHASED"
+OP_GET_BUYER_PURCHASES = "GET_BUYER_PURCHASES"
+OP_ADD_BUYER_PURCHASE = "ADD_BUYER_PURCHASE"
+OP_UPDATE_SESSION_ACTIVITY = "UPDATE_SESSION_ACTIVITY"
+OP_CLEANUP_EXPIRED_SESSIONS = "CLEANUP_EXPIRED_SESSIONS"
+
+# Shopping Cart Operations (stored in customer DB)
+OP_GET_CART = "GET_CART"
+OP_ADD_TO_CART = "ADD_TO_CART"
+OP_REMOVE_FROM_CART = "REMOVE_FROM_CART"
+OP_CLEAR_CART = "CLEAR_CART"
+OP_SAVE_CART = "SAVE_CART"
+
+# ============================================================================
+# API OPERATION CODES - Product Database
+# ============================================================================
+OP_REGISTER_ITEM = "REGISTER_ITEM"
+OP_GET_ITEM = "GET_ITEM"
+OP_UPDATE_ITEM_PRICE = "UPDATE_ITEM_PRICE"
+OP_UPDATE_ITEM_QUANTITY = "UPDATE_ITEM_QUANTITY"
+OP_SEARCH_ITEMS = "SEARCH_ITEMS"
+OP_GET_SELLER_ITEMS = "GET_SELLER_ITEMS"
+OP_PROVIDE_ITEM_FEEDBACK = "PROVIDE_ITEM_FEEDBACK"
+OP_GET_ITEM_FEEDBACK = "GET_ITEM_FEEDBACK"
+OP_CHECK_ITEM_AVAILABILITY = "CHECK_ITEM_AVAILABILITY"
+OP_DECREASE_ITEM_QUANTITY = "DECREASE_ITEM_QUANTITY"
+
+# Session Operations (JN added)
+OP_RESTORE_SESSION_BUYER = 'restore_session_buyer'
+OP_RESTORE_SESSION_SELLER = 'restore_session_seller'
+
+# ============================================================================
+# API OPERATION CODES - Frontend (Client-facing)
+# ============================================================================
+# Seller Frontend APIs
+API_SELLER_CREATE_ACCOUNT = "SELLER_CREATE_ACCOUNT"
+API_SELLER_LOGIN = "SELLER_LOGIN"
+API_SELLER_LOGOUT = "SELLER_LOGOUT"
+API_SELLER_GET_RATING = "SELLER_GET_RATING"
+API_SELLER_REGISTER_ITEM = "SELLER_REGISTER_ITEM"
+API_SELLER_CHANGE_PRICE = "SELLER_CHANGE_PRICE"
+API_SELLER_UPDATE_UNITS = "SELLER_UPDATE_UNITS"
+API_SELLER_DISPLAY_ITEMS = "SELLER_DISPLAY_ITEMS"
+API_SELLER_RESTORE_SESSION = 'seller_restore_session' #JN added
+
+# Buyer Frontend APIs
+API_BUYER_CREATE_ACCOUNT = "BUYER_CREATE_ACCOUNT"
+API_BUYER_LOGIN = "BUYER_LOGIN"
+API_BUYER_LOGOUT = "BUYER_LOGOUT"
+API_BUYER_SEARCH_ITEMS = "BUYER_SEARCH_ITEMS"
+API_BUYER_GET_ITEM = "BUYER_GET_ITEM"
+API_BUYER_ADD_TO_CART = "BUYER_ADD_TO_CART"
+API_BUYER_REMOVE_FROM_CART = "BUYER_REMOVE_FROM_CART"
+API_BUYER_SAVE_CART = "BUYER_SAVE_CART"
+API_BUYER_CLEAR_CART = "BUYER_CLEAR_CART"
+API_BUYER_DISPLAY_CART = "BUYER_DISPLAY_CART"
+API_BUYER_PROVIDE_FEEDBACK = "BUYER_PROVIDE_FEEDBACK"
+API_BUYER_GET_SELLER_RATING = "BUYER_GET_SELLER_RATING"
+API_BUYER_GET_PURCHASES = "BUYER_GET_PURCHASES"
+API_BUYER_RESTORE_SESSION = 'buyer_restore_session' #JN added
+
+# ============================================================================
+# MESSAGE FORMAT DELIMITERS
+# ============================================================================
+MESSAGE_DELIMITER = "\n###END###\n"
+FIELD_DELIMITER = "|||"
+
+# ============================================================================
+# VALIDATION LIMITS
+# ============================================================================
+MAX_NAME_LENGTH = 32
+MAX_KEYWORD_LENGTH = 8
+MAX_KEYWORDS = 5
+MIN_PASSWORD_LENGTH = 4
+MAX_PASSWORD_LENGTH = 32

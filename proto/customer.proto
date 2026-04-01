@@ -1,0 +1,38 @@
+syntax = "proto3";
+package customer;
+
+service CustomerDB {
+    rpc CreateSeller(CreateSellerRequest) returns (DBResponse);
+    rpc LoginSeller(LoginRequest) returns (DBResponse);
+    rpc LogoutSeller(SessionRequest) returns (DBResponse);
+    rpc ValidateSessionSeller(SessionRequest) returns (DBResponse);
+    rpc RestoreSessionSeller(SessionRequest) returns (DBResponse);
+    rpc GetSellerRating(SellerRequest) returns (DBResponse);
+    rpc UpdateSellerFeedback(FeedbackRequest) returns (DBResponse);
+    rpc UpdateSellerItemsSold(UpdateItemsSoldRequest) returns (DBResponse);
+    rpc CreateBuyer(CreateBuyerRequest) returns (DBResponse);
+    rpc LoginBuyer(LoginRequest) returns (DBResponse);
+    rpc LogoutBuyer(SessionRequest) returns (DBResponse);
+    rpc ValidateSessionBuyer(SessionRequest) returns (DBResponse);
+    rpc RestoreSessionBuyer(SessionRequest) returns (DBResponse);
+    rpc GetBuyerPurchases(BuyerRequest) returns (DBResponse);
+    rpc AddPurchase(AddPurchaseRequest) returns (DBResponse);
+    rpc GetCart(SessionRequest) returns (DBResponse);
+    rpc AddToCart(CartRequest) returns (DBResponse);
+    rpc RemoveFromCart(CartRequest) returns (DBResponse);
+    rpc SaveCart(SaveCartRequest) returns (DBResponse);
+    rpc ClearCart(SessionRequest) returns (DBResponse);
+}
+
+message CreateSellerRequest { string username = 1; string password = 2; string seller_name = 3; }
+message CreateBuyerRequest  { string username = 1; string password = 2; string buyer_name = 3; }
+message LoginRequest        { string username = 1; string password = 2; }
+message SessionRequest      { string session_id = 1; }
+message SellerRequest       { string seller_id = 1; }
+message BuyerRequest        { string buyer_id = 1; }
+message FeedbackRequest     { string seller_id = 1; string feedback_type = 2; }
+message UpdateItemsSoldRequest { string seller_id = 1; int32 quantity = 2; }
+message AddPurchaseRequest  { string buyer_id = 1; string item_id = 2; int32 quantity = 3; float price = 4; }
+message CartRequest         { string session_id = 1; string buyer_id = 2; string item_id = 3; int32 quantity = 4; }
+message SaveCartRequest     { string session_id = 1; string buyer_id = 2; }
+message DBResponse          { int32 status = 1; string message = 2; string json_data = 3; }

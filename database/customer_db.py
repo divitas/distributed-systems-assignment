@@ -249,10 +249,15 @@ class AtomicBroadcastNode:
     def _update_peer_meta(self, from_replica: int, meta: dict):
         if meta is None:
             return
+            
+        peer_known_s = meta.get("known_sequence", -1)
         self.peer_known_sequence[from_replica] = max(
             self.peer_known_sequence.get(from_replica, -1),
-            meta.get("known_sequence", -1)
+            peer_known_s
         )
+        # Fast-forward our own horizon so we natively NACK for missing sequences
+        # even if we haven't seen the actual sequence messages yet.
+        self.highest_sequence_seen = max(self.highest_sequence_seen, peer_known_s)
         self.peer_known_delivered[from_replica] = max(
             self.peer_known_delivered.get(from_replica, -1),
             meta.get("known_delivered", -1)
@@ -423,6 +428,19 @@ class AtomicBroadcastNode:
                     for s, req_id in list(self.sequences.items()):
                         if req_id not in self.requests:
                             self._request_missing_request(req_id[0], req_id[1])
+
+                    # Catch-up: Check peer metadata for unassigned requests we completely missed!
+                    for sender_id in range(self.n):
+                        highest_peer_saw = -1
+                        for rid in self.peer_known_request:
+                            highest_peer_saw = max(highest_peer_saw, self.peer_known_request[rid].get(sender_id, -1))
+                            
+                        highest_i_saw = int(self.highest_request_seen_per_sender.get(sender_id, -1))
+                        
+                        # If a peer saw higher, we missed request broadcasts. NACK them!
+                        for missing_local in range(highest_i_saw + 1, int(highest_peer_saw) + 1):
+                            if (sender_id, missing_local) not in self.requests:
+                                self._request_missing_request(sender_id, missing_local)
 
             except Exception as e:
                 print(f"[Replica {self.replica_id}] retransmit worker error: {e}")

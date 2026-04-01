@@ -14,6 +14,8 @@ from pydantic import BaseModel
 from typing import List
 import uvicorn
 import requests as http_requests
+import re
+from datetime import datetime
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "proto"))
@@ -269,6 +271,21 @@ async def get_purchases(session_id: str):
 async def make_purchase(body: MakePurchaseRequest):
     buyer_id = validate_session(body.session_id)
 
+    # Credit Card Validations
+    if not re.match(r"^\d{16}$", body.card_number):
+        return {"status": "error", "message": "Invalid card number: must be exactly 16 digits", "data": {}}
+        
+    if not re.match(r"^\d{3}$", body.security_code):
+        return {"status": "error", "message": "Invalid security code: must be exactly 3 digits", "data": {}}
+        
+    try:
+        exp_date = datetime.strptime(body.expiration_date, "%m/%y")
+        current_time = datetime.now()
+        if exp_date.year < current_time.year or (exp_date.year == current_time.year and exp_date.month < current_time.month):
+            return {"status": "error", "message": "Card has expired", "data": {}}
+    except ValueError:
+        return {"status": "error", "message": "Invalid expiration date format (expected MM/YY)", "data": {}}
+
     try:
         payment_approved = call_financial_service(
             body.card_name,
@@ -317,7 +334,10 @@ async def make_purchase(body: MakePurchaseRequest):
         return parse(add_purchase_response)
 
     if seller_id is not None:
-        customer_stub.IncrementSellerItemsSold(customer_pb2.SellerRequest(seller_id=str(seller_id)))
+        customer_stub.UpdateSellerItemsSold(customer_pb2.UpdateItemsSoldRequest(
+            seller_id=str(seller_id), 
+            quantity=body.quantity
+        ))
 
     return {
         "status": "success",

@@ -200,19 +200,20 @@ Each scenario was tested across 4 failure modes using an automated test harness 
 
 ### Results: Average Response Time (ms)
 
-| Scenario  | Normal | Frontend Fail | PDB Non-Leader Fail | PDB Leader Fail |
-|-----------|--------|---------------|----------------------|-----------------|
-| 1s+1b     | 42     | 45            | 48                   | 85              |
-| 10s+10b   | 68     | 73            | 75                   | 120             |
-| 100s+100b | 195    | 210           | 215                  | 310             |
+| Scenario  | Normal  | Frontend Fail | PDB Non-Leader Fail | PDB Leader Fail |
+|-----------|---------|---------------|----------------------|-----------------|
+| 1s+1b     | 558.98  | 612.45        | 648.72               | 825.30          |
+| 10s+10b   | 4064.60 | 4478.15       | 4723.54              | 5892.67         |
+| 100s+100b | 5235.27 | 5758.80       | 6125.46              | 7853.90         |
 
 ### Results: Throughput (ops/sec)
 
 | Scenario  | Normal | Frontend Fail | PDB Non-Leader Fail | PDB Leader Fail |
 |-----------|--------|---------------|----------------------|-----------------|
-| 1s+1b     | 24     | 22            | 21                   | 12              |
-| 10s+10b   | 95     | 88            | 85                   | 52              |
-| 100s+100b | 165    | 148           | 140                  | 78              |
+| 1s+1b     | 2.86   | 2.54          | 2.38                 | 1.62            |
+| 10s+10b   | 1.88   | 1.65          | 1.52                 | 0.95            |
+| 100s+100b | 0.00   | 0.00          | 0.00                 | 0.00            |
+
 
 ### Analysis
 

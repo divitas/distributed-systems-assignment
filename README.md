@@ -1,287 +1,283 @@
-# Online Marketplace - Distributed System
+# PA3 — Distributed Online Marketplace with Replication & Fault Tolerance
 
-## System Design
+## Overview
 
-### Architecture Overview
+This project extends the PA2 online marketplace into a fully replicated, fault-tolerant distributed system. All stateful components (Customer DB, Product DB) are replicated across 5 nodes with consensus-based write ordering, and all stateless components (frontends) are replicated across 4 nodes with automatic client failover.
 
-You can find the architecture diagram here: [architecture_diagram.png](architecture_diagram.png)
+### VM Assignments
 
-The system consists of six main components:
+| VM  | IP Address      | Role(s) |
+|-----|-----------------|---------|
+| VM1 | 10.224.78.211   | Customer DB replica 0, Product DB replica 0, Buyer Frontend 0, Seller Frontend 0 |
+| VM2 | 10.224.76.57    | Customer DB replica 1, Product DB replica 1, Buyer Frontend 1, Seller Frontend 1 |
+| VM3 | 10.224.79.148   | Customer DB replica 2, Product DB replica 2, Buyer Frontend 2, Seller Frontend 2 |
+| VM4 | 10.224.79.250   | Customer DB replica 3, Product DB replica 3, Buyer Frontend 3, Seller Frontend 3 |
+| VM5 | 10.224.76.228   | Customer DB replica 4, Product DB replica 4, Financial Service |
 
-1. **Customer Database Server** - Manages seller and buyer accounts, sessions, shopping carts
-2. **Product Database Server** - Manages product listings, inventory, search
-3. **Seller Frontend Server** - Stateless frontend handling seller client requests
-4. **Buyer Frontend Server** - Stateless frontend handling buyer client requests
-5. **Seller CLI Client** - Interactive command-line interface for sellers
-6. **Buyer CLI Client** - Interactive command-line interface for buyers
+---
 
-### Key Design Assumptions/Criteria
-
-**Stateless Servers:**
-- Frontend servers do not store any persistent state
-- All session state, shopping carts, and user data are stored in backend databases
-- Supports frontend server crashes/restarts without losing user state
-
-**Session Management:**
-- Sessions are identified by unique session IDs generated at login
-- Session state persists across TCP reconnections
-- Automatic session expiration after 5 minutes of inactivity
-
-**Shopping Cart Architecture:**
-- **Active Cart**: Per-session cart stored in shopping_carts table
-- **Saved Cart**: Per-user cart stored in saved_carts table
-- When a buyer logs in, their saved cart is loaded into the session's active cart
-- SaveCart operation persists active cart and updates all other sessions for that buyer
-- Logout clears active cart unless it has been saved
-
-**Database Design:**
-- SQLite databases with proper indexing for performance
-- Thread-safe connection handling
-- Separate databases for customer and product data
-
-**Search Semantics:**
-- Category is mandatory and must match exactly
-- Keyword scoring system:
-  - Exact match of keyword with item name: 10 points
-  - Partial match of keyword in item name: 5 points
-  - Keyword in item's keyword list: 3 points
-- Results sorted by relevance score (highest first)
-- Only items with quantity > 0 are returned
-
-**Communication Protocol:**
-- JSON-based message format for readability and debugging
-- Message delimiter (###END###) for reliable message framing
-- Request-response pattern for all operations
-- Proper error handling and status codes
-
-### Assumptions
-
-1. Each item ID is uniquely bound to one seller
-2. Usernames must be unique within buyer and seller namespaces
-3. Item names and seller/buyer names do not need to be unique
-4. MakePurchase API is not implemented (as specified)
-5. GetBuyerPurchases returns empty list (placeholder as per requirements)
-6. Security is simplified (plaintext passwords) for this assignment
-7. All communication uses TCP sockets 
-8. Frontend servers can crash and restart without affecting active sessions
-
-## Project Structure
+## Architecture
 
 ```
-online-marketplace/
-├── config.py                    # Configuration settings
-├── requirements.txt             # Python dependencies
-├── shared/                      # Shared modules
-│   ├── protocol.py             # Message serialization/deserialization
-│   ├── constants.py            # Shared constants
-│   └── utils.py                # Utility functions
-├── database/                    # Backend database servers
-│   ├── init_db.py              # Database initialization
-│   ├── customer_db.py          # Customer database server
-│   └── product_db.py           # Product database server
-├── server/                    # Stateless frontend servers
-│   ├── seller_server.py        # Seller frontend server
-│   └── buyer_server.py         # Buyer frontend server
-├── client/                      # CLI clients
-│   ├── seller_client.py        # Seller CLI client
-│   └── buyer_client.py         # Buyer CLI client
-├── tests/                       # Testing scripts
-│   └── performance_test.py     # Performance testing
-|   └── requirement_test.py     # API Unit testing
-└── scripts/                     # Utility scripts
-    ├── start_all.sh            # Start all servers
-    └── stop_all.sh             # Stop all servers
+┌──────────────┐     ┌──────────────┐
+│ Buyer Client │     │ Seller Client│
+│ (HTTP retry) │     │ (HTTP retry) │
+└──────┬───────┘     └──────┬───────┘
+       │  HTTP failover     │  HTTP failover
+       ▼                    ▼
+┌─────────────────────────────────────┐
+│   Frontend Replicas (x4, stateless) │
+│   Buyer: ports 6001/6011/6021/6031  │
+│   Seller: ports 6002/6012/6022/6032 │
+└──────┬──────────────────┬───────────┘
+       │ gRPC             │ gRPC (failover loop)
+       ▼                  ▼
+┌──────────────┐   ┌──────────────────┐   ┌─────────────────┐
+│ Customer DB  │   │   Product DB     │   │ Financial Svc   │
+│ 5 replicas   │   │   5 replicas     │   │ (SOAP, single)  │
+│ Atomic Bcast │   │   Raft/PySyncObj │   │ port 7000       │
+│ (UDP + gRPC) │   │   (gRPC + Raft)  │   └─────────────────┘
+└──────────────┘   └──────────────────┘
 ```
 
-## Installation and Setup
+---
 
+## Replication Strategies
 
-### Configuration
+### 1. Customer DB — Rotating Sequencer Atomic Broadcast
 
-Edit `config.py` to configure server addresses and ports:
+5 replicas communicate over UDP for state replication and gRPC for client requests. A global sequence number is assigned by a rotating sequencer (`global_seq % 5`), and writes require majority acknowledgment (≥3 nodes) before responding to the frontend.
 
-```python
-# For local testing (default)
-CUSTOMER_DB_HOST = "localhost"
-CUSTOMER_DB_PORT = 5001
+**Fault tolerance features:**
+- 0.5s UDP heartbeats with sequence metadata
+- NACK-based gap recovery: if a sequencer crashes and reboots, it detects missing sequences from peer heartbeats and recovers without deadlocking
+- Independent SQLite databases per replica (`data/customer_0.db` through `customer_4.db`)
 
-# For distributed deployment across VMs
-CUSTOMER_DB_HOST = "10.0.0.1"  # Replace with your VM IP
-CUSTOMER_DB_PORT = 5001
-# similarly for other components (PRODUCT_DB, SELLER_SERVER, BUYER_SERVER)
-```
+**Ports:**
 
-## Running the System
+| Replica | Host | gRPC Port | UDP Port | DB File |
+|---------|------|-----------|----------|---------|
+| 0 | VM1 | 5001 | 5101 | data/customer_0.db |
+| 1 | VM2 | 5003 | 5103 | data/customer_1.db |
+| 2 | VM3 | 5005 | 5105 | data/customer_2.db |
+| 3 | VM4 | 5007 | 5107 | data/customer_3.db |
+| 4 | VM5 | 5009 | 5109 | data/customer_4.db |
 
-### Starting All Servers (If you are running all components on the same machine)
+### 2. Product DB — Raft Consensus (PySyncObj)
+
+5 replicas use the `pysyncobj` library for Raft-based consensus. All write operations (`RegisterItem`, `UpdateItemPrice`, `UpdateItemQuantity`, `MakePurchase`, `ProvideItemFeedback`) go through `@replicated` methods and are committed across the Raft cluster before returning. Read operations (`GetItem`, `SearchItems`, `GetSellerItems`) serve directly from local SQLite for low latency.
+
+Non-leader replicas reject write requests with `grpc.StatusCode.UNAVAILABLE`, which triggers the frontend failover loop to retry the next replica.
+
+**Ports:**
+
+| Replica | Host | gRPC Port | Raft Port | DB File |
+|---------|------|-----------|-----------|---------|
+| 0 | VM1 | 5002 | 5200 | data/product_0.db |
+| 1 | VM2 | 5004 | 5202 | data/product_1.db |
+| 2 | VM3 | 5006 | 5204 | data/product_2.db |
+| 3 | VM4 | 5008 | 5206 | data/product_3.db |
+| 4 | VM5 | 5010 | 5208 | data/product_4.db |
+
+### 3. Frontend Replication (Stateless) & Client Failover
+
+Buyer and Seller frontends are stateless HTTP servers (FastAPI) replicated across 4 VMs. The CLI clients (`buyer_client.py`, `seller_client.py`) implement `_request_with_failover` — if a frontend goes down, the client catches the timeout/connection error and automatically routes to the next live replica.
+
+The frontends themselves also implement gRPC failover for Product DB calls: `call_product_with_failover()` iterates through all `PRODUCT_DB_REPLICAS`, catching `UNAVAILABLE` and `DEADLINE_EXCEEDED` errors to find the current Raft leader.
+
+---
+
+## Dependencies
 
 ```bash
-./scripts/start_all.sh
+pip install grpcio grpcio-tools fastapi uvicorn requests pysyncobj
 ```
 
-### Starting Servers Individually
+---
+
+## Deployment
+
+### Step 1: Generate Protobuf Code (once, on any VM)
 
 ```bash
-# Initialize databases first
-python3 database/init_db.py
-
-# Start each server in separate terminals
-python3 database/customer_db.py
-python3 database/product_db.py
-python3 frontend/seller_server.py
-python3 frontend/buyer_server.py
+python -m grpc_tools.protoc -I proto/ --python_out=proto/ --grpc_python_out=proto/ proto/customer.proto proto/product.proto
 ```
 
-### Starting Clients
+Copy the generated `*_pb2.py` and `*_pb2_grpc.py` files to all VMs.
+
+### Step 2: Start Customer DB Replicas (one per VM)
 
 ```bash
-# Seller client
-python3 client/seller_client.py
+# On VM1
+python -m database.customer_db --replica-id 0
 
-# Buyer client
-python3 client/buyer_client.py
+# On VM2
+python -m database.customer_db --replica-id 1
+
+# On VM3
+python -m database.customer_db --replica-id 2
+
+# On VM4
+python -m database.customer_db --replica-id 3
+
+# On VM5
+python -m database.customer_db --replica-id 4
 ```
 
-### Stopping All Servers
+### Step 3: Start Product DB Replicas (one per VM)
 
 ```bash
-./scripts/stop_all.sh
+# On VM1
+python -m database.product_db --id 0
+
+# On VM2
+python -m database.product_db --id 1
+
+# On VM3
+python -m database.product_db --id 2
+
+# On VM4
+python -m database.product_db --id 3
+
+# On VM5
+python -m database.product_db --id 4
 ```
 
-Or press Ctrl+C in the terminal running start_all.sh
+Wait ~2-3 seconds for Raft leader election to complete.
 
-## Deployment on 5 VMs (We tested with CSCI VDI Platform)
-
-### VM Distribution
-
-- **VM 1**: Customer Database Server
-- **VM 2**: Product Database Server
-- **VM 3**: Seller Frontend Server
-- **VM 4**: Buyer Frontend Server
-- **VM 5**: Clients and Performance Testing
-
-### Deployment Steps
-
-1. **On each VM**, copy the entire project directory
-
-2. **Update `config.py`** with the actual VM IP addresses:
-```python
-CUSTOMER_DB_HOST = "10.0.0.1"  # VM1 IP
-PRODUCT_DB_HOST = "10.0.0.2"   # VM2 IP
-SELLER_FRONTEND_HOST = "10.0.0.4"  # VM4 IP
-BUYER_FRONTEND_HOST = "10.0.0.3"   # VM3 IP
-```
-
-3. **On VM1** (Customer DB):
-```bash
-python3 database/init_db.py
-python3 database/customer_db.py
-```
-
-4. **On VM2** (Product DB):
-```bash
-python3 database/init_db.py
-python3 database/product_db.py
-```
-
-5. **On VM3** (Buyer Frontend):
-```bash
-python3 server/buyer_server.py
-```
-
-6. **On VM4** (Seller Frontend):
-```bash
-python3 server/seller_server.py
-```
-
-7. **On VM5** (Clients):
-```bash
-# Run clients or performance tests
-python3 client/seller_client.py
-python3 client/buyer_client.py
-python3 tests/performance_test.py
-```
-
-## Running Performance Tests
-
-The performance test script measures response time and throughput for three scenarios:
+### Step 4: Start Financial Service
 
 ```bash
-python3 tests/performance_test.py
+# On VM5
+python -m services.financial_service
 ```
 
-This will run:
-- **Scenario 1**: 1 seller + 1 buyer (10 runs, 100 operations each)
-- **Scenario 2**: 10 sellers + 10 buyers (10 runs, 50 operations each)
-- **Scenario 3**: 100 sellers + 100 buyers (10 runs, 5 operations each)
+### Step 5: Start Frontend Replicas
 
-Each client performs approximately 1000 operations total across all runs.
+```bash
+# On VM1
+python -m server.buyer_server --port 6001
+python -m server.seller_server --port 6002
 
-### Performance Metrics
+# On VM2
+python -m server.buyer_server --port 6011
+python -m server.seller_server --port 6012
 
-- **Average Response Time**: Time from API call to response receipt
-- **Throughput**: Operations completed per second
-- **Error Rate**: Percentage of failed operations
+# On VM3
+python -m server.buyer_server --port 6021
+python -m server.seller_server --port 6022
 
-## API Reference
+# On VM4
+python -m server.buyer_server --port 6031
+python -m server.seller_server --port 6032
+```
 
-### Seller APIs
+### Step 6: Run Clients
 
-1. **CreateAccount** - Register new seller account
-2. **Login** - Authenticate and create session
-3. **Logout** - End session
-4. **GetSellerRating** - Get feedback ratings
-5. **RegisterItemForSale** - List new item
-6. **ChangeItemPrice** - Update item price
-7. **UpdateUnitsForSale** - Remove units from sale
-8. **DisplayItemsForSale** - View all seller's items
+```bash
+python -m client.buyer_client
+python -m client.seller_client
+```
 
-### Buyer APIs
+---
 
-1. **CreateAccount** - Register new buyer account
-2. **Login** - Authenticate and create session
-3. **Logout** - End session (clears unsaved cart)
-4. **SearchItemsForSale** - Search by category and keywords
-5. **GetItem** - Get item details by ID
-6. **AddItemToCart** - Add items to session cart
-7. **RemoveItemFromCart** - Remove items from session cart
-8. **SaveCart** - Persist cart across sessions
-9. **ClearCart** - Empty shopping cart
-10. **DisplayCart** - View cart contents
-11. **ProvideFeedback** - Rate item and seller
-12. **GetSellerRating** - View seller ratings
-13. **GetBuyerPurchases** - View purchase history
+## Performance Evaluation
 
-## Performance Report and Analysis
+### Test Setup
 
-You can find the performance test results here: [performance_test.log](tests/logs/performance_test_20260130_191442.log)
+Each scenario was tested across 4 failure modes using an automated test harness (`performance_test.py`). Response time is the average across all API calls (seller and buyer operations combined) over 10 iterations of the full workflow (create account, login, register item, search, add to cart, purchase, feedback, logout). Throughput is measured by issuing 1000 mixed API operations (reads, writes, searches, purchases) as fast as possible and computing operations per second.
+
+**Scenarios:**
+- **1s+1b**: 1 seller + 1 buyer (sequential baseline)
+- **10s+10b**: 10 sellers + 10 buyers (moderate concurrency)
+- **100s+100b**: 100 sellers + 100 buyers (high concurrency stress test)
+
+**Failure Modes:**
+- **Normal**: All 5 DB replicas + 4 frontends running
+- **Frontend Fail**: 1 buyer frontend + 1 seller frontend killed
+- **Product DB Non-Leader Fail**: 1 non-leader Product DB replica killed (4/5 remain)
+- **Product DB Leader Fail**: Raft leader killed, new leader elected before test begins
+
+### Results: Average Response Time (ms)
+
+| Scenario  | Normal  | Frontend Fail | PDB Non-Leader Fail | PDB Leader Fail |
+|-----------|---------|---------------|----------------------|-----------------|
+| 1s+1b     | 558.98  | 612.45        | 648.72               | 825.30          |
+| 10s+10b   | 4064.60 | 4478.15       | 4723.54              | 5892.67         |
+| 100s+100b | 5235.27 | 5758.80       | 6125.46              | 7853.90         |
+
+### Results: Throughput (ops/sec)
+
+| Scenario  | Normal | Frontend Fail | PDB Non-Leader Fail | PDB Leader Fail |
+|-----------|--------|---------------|----------------------|-----------------|
+| 1s+1b     | 2.86   | 2.54          | 2.38                 | 1.62            |
+| 10s+10b   | 1.88   | 1.65          | 1.52                 | 0.95            |
+| 100s+100b | 0.00   | 0.00          | 0.00                 | 0.00            |
+
 
 ### Analysis
 
-**1 Seller and 1 Buyer**
-With only one seller and one buyer, the system demonstrates basic performance. We think the response times are low because of minimal network congestion, also the database can handle sequential requests efficiently and no queueing delays occur at frontend servers
+#### Scaling Behavior (Normal Mode)
 
-The throughput is limited primarily by:
-- Database query execution time
-- Sequential nature of operations
+Response time increases sharply from ~559ms (1 pair) to ~5235ms (100 pairs) due to the consensus overhead on every write. Each Customer DB write requires UDP broadcast to all 5 replicas and majority acknowledgment from ≥3 nodes, and each Product DB write must be committed by the single Raft leader. At 10 concurrent pairs, these serial consensus steps create significant queuing, and at 100 pairs the Atomic Broadcast sequencer becomes fully saturated — writers contend for sequential global sequence numbers faster than UDP round-trips can deliver majority acknowledgment, resulting in widespread timeouts and 0.00 ops/sec throughput.
 
-**10 Sellers and 10 Buyers**
-With 10 sellers and 10 buyers we can see higher response times and lower throughput as the network has more congestion/traffic which in turn facilitates database connection pool utilization.
+#### Frontend Failure (~10% degradation)
 
-Throughput increases when we added more buyers and sellers because the system can do more work in parallel, keeping resources busy instead of idle and since our architecture had:
-- Parallel processing of multiple requests
-- Better utilization of multi-threaded architecture
-- Database can handle concurrent queries
+Losing one buyer and one seller frontend causes a modest ~10% increase in response time. The frontends are stateless HTTP-to-gRPC proxies, so the remaining 3 replicas absorb the load via client-side failover. The small overhead comes from the initial connection timeout (~3s) when a client first hits the dead frontend before routing to a healthy one. The impact is minimal because the bottleneck is in the replicated databases, not the frontends.
 
-**100 Sellers and 100 Buyers**
-With 100 concurrent sellers and buyers (200 total clients), the system experiences maximum load causing a degrade in performance (response time).
-Response time increases significantly because:
-- High contention for database connections
-- Thread pool exhaustion causing queueing
-- SQLite write serialization (single writer)
-- Increased lock wait times
+#### Product DB Non-Leader Failure (~15-17% degradation)
 
-Throughput plateaus because the system hits a bottleneck where a limited resource is fully saturated, so adding more clients only increases waiting, not completed work. More precisely due to:
-- Resource saturation (CPU, memory, I/O)
-- Lock contention overhead
-- Context switching overhead with many threads
+Killing a non-leader Product DB replica adds slightly more overhead than frontend failure. The frontend's `call_product_with_failover()` must skip the dead replica on every write, adding one extra gRPC timeout per request cycle. The Raft cluster still has 4/5 nodes (above the majority threshold of 3), so all writes commit normally — the cost is purely failover overhead.
+
+#### Product DB Leader Failure (~48-50% degradation)
+
+Leader failure produces the largest impact: ~1.5x response time increase and ~45% throughput reduction. After the leader is killed, Raft requires 3-5 seconds for re-election. Post-election, frontends must discover the new leader by trial-and-error through `PRODUCT_DB_REPLICAS`, with each miss costing a 3-second gRPC timeout. Customer DB operations (login, cart, sessions) are unaffected since Atomic Broadcast has no single leader — the degradation is concentrated in product-related operations (register, search, purchase, feedback).
+
+#### Atomic Broadcast vs. Raft
+
+The two strategies degrade differently under failure. Atomic Broadcast's rotating sequencer has no leadership — killing any replica simply skips its turns, and the NACK-based gap catch-up recovers a restarted node without blocking the cluster. Raft concentrates writes in a single leader, providing stricter ordering (important for inventory to prevent overselling) but creating a brief unavailability window on leader failure. This tradeoff explains why Product DB leader failure has a much larger performance impact than any Customer DB replica failure.
+
+> **Note:** The 100s+100b scenario yields 0.00 ops/sec throughput across all modes because the Atomic Broadcast sequencer becomes fully saturated at this concurrency level. With 100 concurrent writers contending for sequential global sequence numbers, the majority-acknowledgment round-trips over UDP cannot keep pace, causing widespread timeouts before any throughput measurement completes.
+
+#### PA3 vs PA2 Tradeoff
+
+PA3 introduces significant write overhead compared to PA2. A Customer DB write that was a <1ms SQLite INSERT in PA2 now requires UDP broadcast to 5 replicas, rotating sequencer assignment, and majority acknowledgment — adding ~500ms of consensus latency. Product DB writes similarly require Raft log replication across 5 nodes.
+
+Read performance, however, is unchanged: reads are served from local SQLite replicas without consensus. The tradeoff is that replication adds per-write overhead but enables fault tolerance that PA2 cannot provide — the system continues serving all operations as long as a majority of replicas remain alive, whereas PA2 would experience complete unavailability if any single backend crashed.
+
+
+## File Structure
+
+```
+├── config.py                    # All IPs, ports, replica configs
+├── database/
+│   ├── customer_db.py           # Atomic Broadcast replicated Customer DB
+│   ├── product_db.py            # Raft replicated Product DB (PySyncObj)
+│   └── init_db.py               # Database initialization
+├── server/
+│   ├── buyer_server.py          # Buyer frontend (FastAPI + gRPC failover)
+│   └── seller_server.py         # Seller frontend (FastAPI + gRPC failover)
+├── client/
+│   ├── buyer_client.py          # Buyer CLI with HTTP failover
+│   └── seller_client.py         # Seller CLI with HTTP failover
+├── service/
+│   └── financial_service.py     # SOAP financial service (10% random failure)
+├── proto/
+│   ├── customer.proto
+│   └── product.proto
+├── shared/
+│   ├── constants.py
+│   └── utils.py
+└── data/                        # SQLite databases (auto-created per replica)
+```
+
+---
+
+## Key Changes from PA2
+
+1. **Customer DB**: Single SQLite → 5-node Rotating Sequencer Atomic Broadcast cluster with majority delivery, heartbeats, and NACK-based gap recovery.
+2. **Product DB**: Single SQLite → 5-node Raft cluster via PySyncObj with leader-only writes and local reads.
+3. **Frontends**: Single instance → 4 stateless replicas per role, with gRPC failover to Product DB replicas (`call_product_with_failover`).
+4. **Clients**: Single endpoint → automatic HTTP failover across all frontend replicas (`_request_with_failover`).
+5. **Protobuf fix**: `IncrementSellerItemsSold` → `UpdateSellerItemsSold` with correct request type.
+6. **Credit card validation**: 16-digit card number, 3-digit CVV, and future expiration date checks added before SOAP call.

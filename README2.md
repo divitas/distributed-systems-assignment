@@ -217,61 +217,34 @@ Each scenario was tested across 4 failure modes using an automated test harness 
 
 ### Analysis
 
-#### Scaling Behavior Across Scenarios (Normal Mode)
+#### Scaling Behavior (Normal Mode)
 
-Response time increases from ~42ms (1 pair) to ~195ms (100 pairs), roughly a 4.6x increase for a 100x increase in concurrency. This sublinear degradation demonstrates effective parallelism: the 4 stateless frontend replicas distribute incoming HTTP requests across VMs, and read operations (search, get item, display cart) are served directly from each replica's local SQLite without requiring consensus. Throughput scales from 24 ops/sec to 165 ops/sec, confirming that concurrent frontend replicas absorb load effectively.
+Response time increases sharply from ~559ms (1 pair) to ~5235ms (100 pairs) due to the consensus overhead on every write. Each Customer DB write requires UDP broadcast to all 5 replicas and majority acknowledgment from ≥3 nodes, and each Product DB write must be committed by the single Raft leader. At 10 concurrent pairs, these serial consensus steps create significant queuing, and at 100 pairs the Atomic Broadcast sequencer becomes fully saturated — writers contend for sequential global sequence numbers faster than UDP round-trips can deliver majority acknowledgment, resulting in widespread timeouts and 0.00 ops/sec throughput.
 
-The primary bottleneck at high concurrency is the write path. Every Customer DB write passes through Atomic Broadcast (UDP round-trips + majority acknowledgment from ≥3 replicas), and every Product DB write must be committed by the single Raft leader. These serial consensus steps create a natural throughput ceiling for write-heavy workloads. At 100 concurrent pairs, contention on the rotating sequencer and the Raft leader becomes the dominant source of increased latency.
+#### Frontend Failure (~10% degradation)
 
-#### Impact of Frontend Failure (~7-8% degradation)
+Losing one buyer and one seller frontend causes a modest ~10% increase in response time. The frontends are stateless HTTP-to-gRPC proxies, so the remaining 3 replicas absorb the load via client-side failover. The small overhead comes from the initial connection timeout (~3s) when a client first hits the dead frontend before routing to a healthy one. The impact is minimal because the bottleneck is in the replicated databases, not the frontends.
 
-Killing one buyer and one seller frontend produces a modest increase in response time and a comparable decrease in throughput. The stateless frontends serve as simple HTTP-to-gRPC proxies, so losing one shifts its share of client requests to the remaining 3 replicas via the client-side failover loop. The small overhead comes from the initial connection timeout (~3 seconds) that a client experiences before discovering the dead frontend and routing to the next one. Once the dead frontend is identified, subsequent requests in the same session skip it entirely. The overall impact is minimal because the bottleneck is in the replicated databases, not the frontends.
+#### Product DB Non-Leader Failure (~15-17% degradation)
 
-#### Impact of Product DB Non-Leader Failure (~10-15% degradation)
+Killing a non-leader Product DB replica adds slightly more overhead than frontend failure. The frontend's `call_product_with_failover()` must skip the dead replica on every write, adding one extra gRPC timeout per request cycle. The Raft cluster still has 4/5 nodes (above the majority threshold of 3), so all writes commit normally — the cost is purely failover overhead.
 
-Killing a non-leader Product DB replica causes slightly more degradation than frontend failure. The frontend's `call_product_with_failover()` loop must skip the dead replica on every write request, adding one extra gRPC timeout per request cycle. Read operations are also affected since one fewer replica is available to serve local queries. However, the Raft cluster retains 4/5 nodes — well above the majority threshold of 3 — so all writes continue to commit normally. The performance cost is primarily failover overhead rather than any fundamental capacity reduction.
+#### Product DB Leader Failure (~48-50% degradation)
 
-#### Impact of Product DB Leader Failure (~2x degradation)
+Leader failure produces the largest impact: ~1.5x response time increase and ~45% throughput reduction. After the leader is killed, Raft requires 3-5 seconds for re-election. Post-election, frontends must discover the new leader by trial-and-error through `PRODUCT_DB_REPLICAS`, with each miss costing a 3-second gRPC timeout. Customer DB operations (login, cart, sessions) are unaffected since Atomic Broadcast has no single leader — the degradation is concentrated in product-related operations (register, search, purchase, feedback).
 
-The leader failure scenario shows the most significant impact: approximately 2x increase in response time and 50% reduction in throughput. Two factors explain this:
+#### Atomic Broadcast vs. Raft
 
-1. **Re-election delay**: When the Raft leader dies, the remaining replicas must detect the failure via heartbeat timeout (~1-2s), hold an election, and establish a new leader. During this window, all Product DB write operations are blocked. Although re-election completes within 3-5 seconds, any in-flight requests experience the full delay.
+The two strategies degrade differently under failure. Atomic Broadcast's rotating sequencer has no leadership — killing any replica simply skips its turns, and the NACK-based gap catch-up recovers a restarted node without blocking the cluster. Raft concentrates writes in a single leader, providing stricter ordering (important for inventory to prevent overselling) but creating a brief unavailability window on leader failure. This tradeoff explains why Product DB leader failure has a much larger performance impact than any Customer DB replica failure.
 
-2. **Leader discovery overhead**: After the new leader is elected, frontends must discover it through trial-and-error. Each write request iterates through `PRODUCT_DB_REPLICAS` until it finds the new leader, meaning the first several requests pay a penalty of N-1 failed gRPC attempts (each with a 3-second timeout). Under high concurrency, many requests hit this discovery phase simultaneously.
+> **Note:** The 100s+100b scenario yields 0.00 ops/sec throughput across all modes because the Atomic Broadcast sequencer becomes fully saturated at this concurrency level. With 100 concurrent writers contending for sequential global sequence numbers, the majority-acknowledgment round-trips over UDP cannot keep pace, causing widespread timeouts before any throughput measurement completes.
 
-The Customer DB (Atomic Broadcast) is completely unaffected by Product DB leader failure, so operations that only touch the Customer DB (login, logout, cart operations) maintain their normal latency. The degradation is concentrated in product-related operations: register item, search, purchase, and feedback.
+#### PA3 vs PA2 Tradeoff
 
-#### Comparison: Atomic Broadcast vs. Raft
+PA3 introduces significant write overhead compared to PA2. A Customer DB write that was a <1ms SQLite INSERT in PA2 now requires UDP broadcast to 5 replicas, rotating sequencer assignment, and majority acknowledgment — adding ~500ms of consensus latency. Product DB writes similarly require Raft log replication across 5 nodes.
 
-The two replication strategies exhibit fundamentally different failure characteristics. The Customer DB's Rotating Sequencer Atomic Broadcast has no single leader — any replica can initiate a write, and the sequencer role rotates deterministically (`global_seq % 5`). Killing any single Customer DB replica does not create a leadership vacuum; the system skips the dead node's turns in the rotation and continues with the remaining majority. Recovery is also graceful: the NACK-based gap catch-up protocol allows a restarted replica to recover missed writes from peers without blocking the cluster.
+Read performance, however, is unchanged: reads are served from local SQLite replicas without consensus. The tradeoff is that replication adds per-write overhead but enables fault tolerance that PA2 cannot provide — the system continues serving all operations as long as a majority of replicas remain alive, whereas PA2 would experience complete unavailability if any single backend crashed.
 
-The Product DB's Raft consensus concentrates all write authority in a single leader. This provides stronger consistency guarantees (strict linearizability of writes) and simpler reasoning about state, but creates a single point of sensitivity: leader failure always triggers an election with a brief unavailability window. This tradeoff is appropriate for the Product DB because item registration and inventory updates require strict ordering to prevent issues like overselling, while the Customer DB's operations (account creation, session management, cart updates) are more tolerant of the slightly weaker ordering guarantees that Atomic Broadcast provides.
-
-#### Impact of PA3 Changes on Performance vs. PA2
-
-Compared to the non-replicated PA2 architecture, PA3 introduces measurable overhead on the write path. In PA2, a write to the Customer DB was a single SQLite INSERT taking <1ms. In PA3, the same write requires broadcasting a REQUEST to all 5 replicas, waiting for the rotating sequencer to assign a global sequence number, collecting majority acknowledgment via UDP, and only then applying the write locally — adding 20-40ms of consensus overhead per write. Similarly, Product DB writes that previously hit a single SQLite now require Raft log replication across 5 nodes.
-
-However, read performance is largely unchanged or improved under concurrency. Reads in PA3 are served from local SQLite replicas without consensus, and the 4 frontend replicas distribute read load across VMs. Under high concurrency (100s+100b), this parallelism more than compensates for the write overhead, yielding significantly higher overall throughput than a single-node PA2 deployment could achieve.
-
-The key insight is that replication introduces a constant per-write overhead (consensus latency) but enables horizontal read scaling and fault tolerance that a single-node architecture cannot provide. The system gracefully degrades under failure — continuing to serve all operations as long as a majority of replicas remain alive — whereas PA2 would experience complete unavailability if any single backend crashed.
-
----
-
-## Fault Tolerance Testing
-
-### Kill a Customer DB replica
-Stop any Customer DB process. The remaining 4 replicas still form a majority (≥3), so writes continue. The rotating sequencer skips the dead node. On restart, the replica recovers missed sequences via NACK gap catch-up.
-
-### Kill a Product DB replica
-If a non-leader replica dies, reads may briefly fail on that node but frontends failover to the next. If the leader dies, Raft elects a new leader within seconds. Frontends automatically discover the new leader through the failover loop.
-
-### Kill a Frontend
-The CLI client detects the connection error and retries the next frontend replica automatically. No user intervention required.
-
-### Kill an Entire VM
-Stopping all processes on a single VM removes one Customer DB replica, one Product DB replica, and one frontend pair simultaneously. All layers handle this independently: Customer DB still has 4/5 majority, Product DB still has 4/5 majority (or triggers re-election if the leader was on that VM), and the clients failover to one of the remaining 3 frontends. The system continues operating without manual intervention.
-
----
 
 ## File Structure
 

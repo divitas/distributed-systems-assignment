@@ -4,50 +4,58 @@ Modify these settings to match your deployment environment
 """
 
 # ============================================================================
+# VM IP ADDRESSES
+# ============================================================================
+VM1 = "10.224.78.211"
+VM2 = "10.224.76.57"
+VM3 = "10.224.79.148"
+VM4 = "10.224.79.250"
+VM5 = "10.224.76.228"
+
+# ============================================================================
 # SINGLE INSTANCE BACKEND CONFIGURATIONS (PA2-compatible fallback)
 # ============================================================================
-CUSTOMER_DB_HOST = "10.224.76.209"
+CUSTOMER_DB_HOST = VM1
 CUSTOMER_DB_PORT = 5001
 
-PRODUCT_DB_HOST = "10.224.79.164"
+PRODUCT_DB_HOST = VM2
 PRODUCT_DB_PORT = 5002
 
 # ============================================================================
 # FRONTEND SERVER CONFIGURATIONS (legacy/single instance fallback)
 # ============================================================================
-BUYER_FRONTEND_HOST = "10.224.78.247"
+BUYER_FRONTEND_HOST = VM3
 BUYER_FRONTEND_PORT = 6001
 
-SELLER_FRONTEND_HOST = "10.224.79.170"
+SELLER_FRONTEND_HOST = VM4
 SELLER_FRONTEND_PORT = 6002
 
 # ============================================================================
 # FRONTEND REPLICA CONFIGURATIONS (PA3 Step 1)
-# You can run multiple replicas on the same VM using different ports
 # ============================================================================
 BUYER_FRONTEND_REPLICAS = [
-    {"id": 0, "host": "10.224.78.247", "port": 6001},
-    {"id": 1, "host": "10.224.76.209", "port": 6011},
-    {"id": 2, "host": "10.224.79.170", "port": 6021},
-    {"id": 3, "host": "10.224.77.206", "port": 6031},
+    {"id": 0, "host": VM1, "port": 6001},
+    {"id": 1, "host": VM2, "port": 6011},
+    {"id": 2, "host": VM3, "port": 6021},
+    {"id": 3, "host": VM4, "port": 6031},
 ]
 
 SELLER_FRONTEND_REPLICAS = [
-    {"id": 0, "host": "10.224.79.170", "port": 6002},
-    {"id": 1, "host": "10.224.78.247", "port": 6012},
-    {"id": 2, "host": "10.224.76.209", "port": 6022},
-    {"id": 3, "host": "10.224.77.206", "port": 6032},
+    {"id": 0, "host": VM1, "port": 6002},
+    {"id": 1, "host": VM2, "port": 6012},
+    {"id": 2, "host": VM3, "port": 6022},
+    {"id": 3, "host": VM4, "port": 6032},
 ]
 
 # ============================================================================
 # CUSTOMER DB REPLICAS (PA3 - Rotating Sequencer Atomic Broadcast)
 # ============================================================================
 CUSTOMER_DB_REPLICAS = [
-    {"id": 0, "host": "10.224.76.209", "grpc_port": 5001, "udp_port": 5101, "db_file": "data/customer_0.db"},
-    {"id": 1, "host": "10.224.78.247", "grpc_port": 5003, "udp_port": 5103, "db_file": "data/customer_1.db"},
-    {"id": 2, "host": "10.224.79.170", "grpc_port": 5005, "udp_port": 5105, "db_file": "data/customer_2.db"},
-    {"id": 3, "host": "10.224.77.206", "grpc_port": 5007, "udp_port": 5107, "db_file": "data/customer_3.db"},
-    {"id": 4, "host": "10.224.77.206", "grpc_port": 5009, "udp_port": 5109, "db_file": "data/customer_4.db"},
+    {"id": 0, "host": VM1, "grpc_port": 5001, "udp_port": 5101, "db_file": "data/customer_0.db"},
+    {"id": 1, "host": VM2, "grpc_port": 5003, "udp_port": 5103, "db_file": "data/customer_1.db"},
+    {"id": 2, "host": VM3, "grpc_port": 5005, "udp_port": 5105, "db_file": "data/customer_2.db"},
+    {"id": 3, "host": VM4, "grpc_port": 5007, "udp_port": 5107, "db_file": "data/customer_3.db"},
+    {"id": 4, "host": VM5, "grpc_port": 5009, "udp_port": 5109, "db_file": "data/customer_4.db"},
 ]
 
 ATOMIC_BROADCAST_SOCKET_TIMEOUT = 0.5
@@ -56,9 +64,20 @@ ATOMIC_BROADCAST_DELIVERY_WAIT_TIMEOUT = 10
 ATOMIC_BROADCAST_PENDING_SCAN_INTERVAL = 0.2
 
 # ============================================================================
+# PRODUCT DB REPLICAS (PA3 - Raft via PySyncObj)
+# ============================================================================
+PRODUCT_DB_REPLICAS = [
+    {"id": 0, "host": VM1, "grpc_port": 5002, "raft_port": 5200, "db_file": "data/product_0.db"},
+    {"id": 1, "host": VM2, "grpc_port": 5004, "raft_port": 5202, "db_file": "data/product_1.db"},
+    {"id": 2, "host": VM3, "grpc_port": 5006, "raft_port": 5204, "db_file": "data/product_2.db"},
+    {"id": 3, "host": VM4, "grpc_port": 5008, "raft_port": 5206, "db_file": "data/product_3.db"},
+    {"id": 4, "host": VM5, "grpc_port": 5010, "raft_port": 5208, "db_file": "data/product_4.db"},
+]
+
+# ============================================================================
 # FINANCIAL SERVICE CONFIGURATIONS
 # ============================================================================
-FINANCIAL_SERVICE_HOST = "10.224.77.206"
+FINANCIAL_SERVICE_HOST = VM5
 FINANCIAL_SERVICE_PORT = 7000
 
 # ============================================================================

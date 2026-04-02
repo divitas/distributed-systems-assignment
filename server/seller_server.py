@@ -1,6 +1,7 @@
 """
 Seller Frontend Server - FastAPI + gRPC version
 Supports running multiple frontend replicas via --port
+PA3: Product DB gRPC failover across Raft replicas
 """
 
 import argparse
@@ -25,14 +26,45 @@ import product_pb2_grpc
 app = FastAPI(title="Seller Frontend Server")
 
 
+# ---- Customer DB stub (unchanged) ----
+
 def get_customer_stub():
     channel = grpc.insecure_channel(f"{config.CUSTOMER_DB_HOST}:{config.CUSTOMER_DB_PORT}")
     return customer_pb2_grpc.CustomerDBStub(channel)
 
 
-def get_product_stub():
-    channel = grpc.insecure_channel(f"{config.PRODUCT_DB_HOST}:{config.PRODUCT_DB_PORT}")
-    return product_pb2_grpc.ProductDBStub(channel)
+# ---- Product DB stub with failover across Raft replicas ----
+
+def call_product_with_failover(method_name, request):
+    """
+    Call a Product DB gRPC method with full failover.
+    If a replica returns UNAVAILABLE (not leader or down), retry next replica.
+    """
+    last_error = None
+    for replica in config.PRODUCT_DB_REPLICAS:
+        try:
+            channel = grpc.insecure_channel(
+                f"{replica['host']}:{replica['grpc_port']}",
+                options=[('grpc.connect_timeout_ms', 3000)]
+            )
+            stub = product_pb2_grpc.ProductDBStub(channel)
+            method = getattr(stub, method_name)
+            return method(request, timeout=10)
+        except grpc.RpcError as e:
+            last_error = e
+            status = e.code()
+            print(f"[Seller Frontend] Product DB replica {replica['id']} "
+                  f"({replica['host']}:{replica['grpc_port']}) error: {status} - {e.details()}")
+            if status in (grpc.StatusCode.UNAVAILABLE, grpc.StatusCode.DEADLINE_EXCEEDED):
+                continue  # try next replica
+            else:
+                raise  # non-failover error, propagate
+        except Exception as e:
+            last_error = e
+            print(f"[Seller Frontend] Product DB replica {replica['id']} connection failed: {e}")
+            continue
+
+    raise Exception(f"All Product DB replicas failed for {method_name}. Last error: {last_error}")
 
 
 def parse(response):
@@ -147,8 +179,7 @@ async def register_item(body: RegisterItemRequest):
     if body.price < 0 or body.quantity < 0 or body.category < 1 or body.category > 8:
         raise HTTPException(status_code=400, detail="Invalid price, quantity, or category")
 
-    stub = get_product_stub()
-    response = stub.RegisterItem(product_pb2.RegisterItemRequest(
+    response = call_product_with_failover("RegisterItem", product_pb2.RegisterItemRequest(
         seller_id=str(seller_id),
         name=body.name,
         category=body.category,
@@ -167,8 +198,7 @@ async def change_price(body: ChangePriceRequest):
     if body.new_price < 0:
         raise HTTPException(status_code=400, detail="Invalid price")
 
-    stub = get_product_stub()
-    response = stub.UpdateItemPrice(product_pb2.UpdatePriceRequest(
+    response = call_product_with_failover("UpdateItemPrice", product_pb2.UpdatePriceRequest(
         item_id=body.item_id,
         seller_id=str(seller_id),
         new_price=body.new_price
@@ -183,8 +213,7 @@ async def update_units(body: UpdateUnitsRequest):
     if body.quantity < 0:
         raise HTTPException(status_code=400, detail="Invalid quantity")
 
-    stub = get_product_stub()
-    response = stub.UpdateItemQuantity(product_pb2.UpdateQuantityRequest(
+    response = call_product_with_failover("UpdateItemQuantity", product_pb2.UpdateQuantityRequest(
         item_id=body.item_id,
         seller_id=str(seller_id),
         quantity_to_remove=body.quantity
@@ -195,8 +224,9 @@ async def update_units(body: UpdateUnitsRequest):
 @app.get("/seller/display_items")
 async def display_items(session_id: str):
     seller_id = validate_session(session_id)
-    stub = get_product_stub()
-    response = stub.GetSellerItems(product_pb2.SellerRequest(seller_id=str(seller_id)))
+    response = call_product_with_failover("GetSellerItems", product_pb2.SellerRequest(
+        seller_id=str(seller_id)
+    ))
     return parse(response)
 
 
@@ -207,6 +237,6 @@ if __name__ == "__main__":
 
     print(f"Seller Frontend starting on port {args.port}")
     print(f"Customer DB: {config.CUSTOMER_DB_HOST}:{config.CUSTOMER_DB_PORT}")
-    print(f"Product DB: {config.PRODUCT_DB_HOST}:{config.PRODUCT_DB_PORT}")
+    print(f"Product DB Replicas: {len(config.PRODUCT_DB_REPLICAS)} nodes (Raft failover)")
 
     uvicorn.run(app, host="0.0.0.0", port=args.port)

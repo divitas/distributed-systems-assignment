@@ -2,6 +2,7 @@
 Buyer Frontend Server - FastAPI + gRPC version
 Includes MakePurchase with SOAP financial service
 Supports running multiple frontend replicas via --port
+PA3: Product DB gRPC failover across Raft replicas
 """
 
 import argparse
@@ -29,14 +30,72 @@ import product_pb2_grpc
 app = FastAPI(title="Buyer Frontend Server")
 
 
+# ---- Customer DB stub (unchanged — uses Atomic Broadcast replicas) ----
+
 def get_customer_stub():
     channel = grpc.insecure_channel(f"{config.CUSTOMER_DB_HOST}:{config.CUSTOMER_DB_PORT}")
     return customer_pb2_grpc.CustomerDBStub(channel)
 
 
+# ---- Product DB stub with failover across Raft replicas ----
+
 def get_product_stub():
-    channel = grpc.insecure_channel(f"{config.PRODUCT_DB_HOST}:{config.PRODUCT_DB_PORT}")
-    return product_pb2_grpc.ProductDBStub(channel)
+    """
+    Try each Product DB replica in order. If a replica is down or not the
+    Raft leader (returns UNAVAILABLE), catch the exception and try the next.
+    """
+    last_error = None
+    for replica in config.PRODUCT_DB_REPLICAS:
+        try:
+            channel = grpc.insecure_channel(
+                f"{replica['host']}:{replica['grpc_port']}",
+                options=[
+                    ('grpc.connect_timeout_ms', 3000),
+                    ('grpc.initial_reconnect_backoff_ms', 500),
+                ]
+            )
+            # Quick connectivity check
+            grpc.channel_ready_future(channel).result(timeout=3)
+            return product_pb2_grpc.ProductDBStub(channel)
+        except Exception as e:
+            last_error = e
+            print(f"[Buyer Frontend] Product DB replica {replica['id']} "
+                  f"({replica['host']}:{replica['grpc_port']}) unreachable: {e}")
+            continue
+
+    raise Exception(f"All Product DB replicas are unreachable. Last error: {last_error}")
+
+
+def call_product_with_failover(method_name, request):
+    """
+    Call a Product DB gRPC method with full failover.
+    If a replica returns UNAVAILABLE (not leader or down), retry next replica.
+    """
+    last_error = None
+    for replica in config.PRODUCT_DB_REPLICAS:
+        try:
+            channel = grpc.insecure_channel(
+                f"{replica['host']}:{replica['grpc_port']}",
+                options=[('grpc.connect_timeout_ms', 3000)]
+            )
+            stub = product_pb2_grpc.ProductDBStub(channel)
+            method = getattr(stub, method_name)
+            return method(request, timeout=10)
+        except grpc.RpcError as e:
+            last_error = e
+            status = e.code()
+            print(f"[Buyer Frontend] Product DB replica {replica['id']} "
+                  f"({replica['host']}:{replica['grpc_port']}) error: {status} - {e.details()}")
+            if status in (grpc.StatusCode.UNAVAILABLE, grpc.StatusCode.DEADLINE_EXCEEDED):
+                continue  # try next replica
+            else:
+                raise  # non-failover error, propagate
+        except Exception as e:
+            last_error = e
+            print(f"[Buyer Frontend] Product DB replica {replica['id']} connection failed: {e}")
+            continue
+
+    raise Exception(f"All Product DB replicas failed for {method_name}. Last error: {last_error}")
 
 
 def parse(response):
@@ -163,8 +222,7 @@ async def restore_session(body: SessionRequest):
 @app.post("/buyer/search_items")
 async def search_items(body: SearchRequest):
     validate_session(body.session_id)
-    stub = get_product_stub()
-    response = stub.SearchItems(product_pb2.SearchRequest(
+    response = call_product_with_failover("SearchItems", product_pb2.SearchRequest(
         category=body.category,
         keywords=body.keywords
     ))
@@ -174,8 +232,7 @@ async def search_items(body: SearchRequest):
 @app.get("/buyer/get_item")
 async def get_item(session_id: str, item_id: str):
     validate_session(session_id)
-    stub = get_product_stub()
-    response = stub.GetItem(product_pb2.ItemRequest(item_id=item_id))
+    response = call_product_with_failover("GetItem", product_pb2.ItemRequest(item_id=item_id))
     return parse(response)
 
 
@@ -236,8 +293,7 @@ async def display_cart(session_id: str):
 async def provide_feedback(body: FeedbackRequest):
     validate_session(body.session_id)
 
-    product_stub = get_product_stub()
-    product_stub.ProvideItemFeedback(product_pb2.ItemFeedbackRequest(
+    call_product_with_failover("ProvideItemFeedback", product_pb2.ItemFeedbackRequest(
         item_id=body.item_id,
         thumbs=body.thumbs
     ))
@@ -274,10 +330,10 @@ async def make_purchase(body: MakePurchaseRequest):
     # Credit Card Validations
     if not re.match(r"^\d{16}$", body.card_number):
         return {"status": "error", "message": "Invalid card number: must be exactly 16 digits", "data": {}}
-        
+
     if not re.match(r"^\d{3}$", body.security_code):
         return {"status": "error", "message": "Invalid security code: must be exactly 3 digits", "data": {}}
-        
+
     try:
         exp_date = datetime.strptime(body.expiration_date, "%m/%y")
         current_time = datetime.now()
@@ -307,8 +363,7 @@ async def make_purchase(body: MakePurchaseRequest):
             "data": {}
         }
 
-    product_stub = get_product_stub()
-    purchase_response = product_stub.MakePurchase(product_pb2.PurchaseRequest(
+    purchase_response = call_product_with_failover("MakePurchase", product_pb2.PurchaseRequest(
         item_id=body.item_id,
         buyer_id=str(buyer_id),
         quantity=body.quantity
@@ -335,7 +390,7 @@ async def make_purchase(body: MakePurchaseRequest):
 
     if seller_id is not None:
         customer_stub.UpdateSellerItemsSold(customer_pb2.UpdateItemsSoldRequest(
-            seller_id=str(seller_id), 
+            seller_id=str(seller_id),
             quantity=body.quantity
         ))
 
@@ -358,7 +413,7 @@ if __name__ == "__main__":
 
     print(f"Buyer Frontend starting on port {args.port}")
     print(f"Customer DB: {config.CUSTOMER_DB_HOST}:{config.CUSTOMER_DB_PORT}")
-    print(f"Product DB: {config.PRODUCT_DB_HOST}:{config.PRODUCT_DB_PORT}")
+    print(f"Product DB Replicas: {len(config.PRODUCT_DB_REPLICAS)} nodes (Raft failover)")
     print(f"Financial Service: {config.FINANCIAL_SERVICE_HOST}:{config.FINANCIAL_SERVICE_PORT}")
 
     uvicorn.run(app, host="0.0.0.0", port=args.port)

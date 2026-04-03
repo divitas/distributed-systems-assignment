@@ -90,7 +90,7 @@ SESSION_CHECK_INTERVAL = 60
 # PERFORMANCE CONFIGURATION
 # ============================================================================
 BUFFER_SIZE = 8192
-MAX_WORKERS = 100
+MAX_WORKERS = 500
 SOCKET_TIMEOUT = 30
 BACKLOG = 100
 
@@ -104,8 +104,8 @@ HTTP_RETRY_ALL_REPLICAS = True
 CUSTOMER_DB_FILE = "data/customer.db"
 PRODUCT_DB_FILE = "data/product.db"
 
-DB_POOL_SIZE = 20
-DB_MAX_OVERFLOW = 30
+DB_POOL_SIZE = 50
+DB_MAX_OVERFLOW = 150
 
 # ============================================================================
 # SEARCH CONFIGURATION

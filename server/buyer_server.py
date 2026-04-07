@@ -239,6 +239,12 @@ async def get_item(session_id: str, item_id: str):
 @app.post("/buyer/add_to_cart")
 async def add_to_cart(body: CartRequest):
     buyer_id = validate_session(body.session_id)
+    
+    # Verify that the item actually exists in the Product DB!
+    prod_response = call_product_with_failover("GetItem", product_pb2.ItemRequest(item_id=body.item_id))
+    if prod_response.status != 1:
+        return parse(prod_response)
+        
     stub = get_customer_stub()
     response = stub.AddToCart(customer_pb2.CartRequest(
         session_id=body.session_id,
